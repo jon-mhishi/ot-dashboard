@@ -101,15 +101,22 @@ window._spPageContextInfo = window._spPageContextInfo || (function(){
                placeholder="Enter your Azure DevOps PAT">
       </div>
       <div class="form-group">
-        <label class="form-label" for="devOpsQuery">Work Items Query (optional):</label>
-        <input type="text" id="devOpsQuery" class="form-input" 
-               placeholder="Leave empty to get all work items">
-      </div>
-      <div class="form-group">
-        <label class="form-label" for="devOpsFields">Fields to Display (comma-separated):</label>
-        <input type="text" id="devOpsFields" class="form-input" 
-               placeholder="TaskId,TaskName,TaskType,Status,PlannedDate,CompletedDate,Owner,AreaPath,IterationPath" 
-               value="TaskId,TaskName,TaskType,Status,PlannedDate,CompletedDate,Owner,AreaPath,IterationPath">
+        <label class="form-label" for="devOpsFields">Fields to Display:</label>
+        <select id="devOpsFields" class="form-input" multiple size="6" style="height: 120px;">
+          <option value="TaskId" selected>Task ID</option>
+          <option value="TaskName" selected>Task Name</option>
+          <option value="TaskType" selected>Task Type</option>
+          <option value="Status" selected>Status</option>
+          <option value="PlannedDate" selected>Planned Date</option>
+          <option value="CompletedDate" selected>Completed Date</option>
+          <option value="Owner" selected>Owner</option>
+          <option value="AreaPath" selected>Area Path</option>
+          <option value="IterationPath" selected>Iteration Path</option>
+          <option value="CreatedDate">Created Date</option>
+          <option value="ChangedDate">Changed Date</option>
+          <option value="Description">Description</option>
+        </select>
+        <small style="color: #666; font-size: 12px;">Hold Ctrl/Cmd to select multiple fields</small>
       </div>
       <div class="form-group">
         <label class="form-label" for="devOpsExcludePaths">Exclude Area Paths (comma-separated):</label>
@@ -946,8 +953,9 @@ tbody tr:hover{background:#EEF2FF}
       
       // For sites, we'll create a summary from the work items
       SITES = [];
-      siteCodes = [...new Set(workItems.map(item => item.fields['Custom.SiteCode']).filter(Boolean))];
-      logDiag('Extracted site codes from Azure DevOps:', siteCodes);
+      siteCodes = [...new Set(workItems.map(item => item.fields['Custom.SiteCode']).filter(Boolean))]
+        .filter(code => !['BEA', 'BNA', 'BSA'].includes(code.toUpperCase()));
+      logDiag('Extracted site codes from Azure DevOps (excluding BEA/BNA/BSA):', siteCodes);
       siteCodes.forEach(siteCode => {
         const siteItems = workItems.filter(item => item.fields['Custom.SiteCode'] === siteCode);
         SITES.push({
@@ -1134,6 +1142,10 @@ tbody tr:hover{background:#EEF2FF}
         // Update status
         statusEl.textContent = `Loaded Projects: ${PROJECTS.length} • Tasks: ${TASKS.length} • Sites: ${SITES.length} (from Azure DevOps)`;
         logDiag('Azure DevOps data loaded and rendered', {projects:PROJECTS.length, tasks:TASKS.length, sites:SITES.length});
+        
+        // Hide the Azure DevOps configuration section after successful load
+        document.getElementById('devOpsConfig').style.display = 'none';
+        
         hideLoader();
         
       } catch (error) {
@@ -1319,12 +1331,12 @@ tbody tr:hover{background:#EEF2FF}
       {key:"Status", label:"Status", get:(r)=> { const s=normStatus(r.Status)||""; const c = s==="Completed"?"completed":(s==="In Progress"?"inprogress":(s==="Blocked"?"blocked":"planned")); return `<span><span class=\"status-dot ${c}\"></span>${s}</span>`; }},
       {key:"PlannedDate", label:"PlannedDate", get:(r)=> formatDate(r.PlannedDate||r.Planned)},
       {key:"CompletedDate", label:"CompletedDate", get:(r)=> formatDate(r.CompletedDate||r.Completed)},
-      {key:"__Source", label:"Source", get:(r)=> r.__Source||'Excel'}
     ];
-    // Get configured fields to display
-    const configuredFields = document.getElementById('devOpsFields')?.value?.split(',').map(f => f.trim()).filter(Boolean) || [];
+    // Get configured fields to display from multi-select dropdown
+    const configuredFields = Array.from(document.getElementById('devOpsFields')?.selectedOptions || [])
+      .map(option => option.value).filter(Boolean);
     
-    const skipKeys = new Set(["BusinessUnit","Region","Country","Site","Project","Description","__Source"]);
+    const skipKeys = new Set(["BusinessUnit","Region","Country","Site","Project","Description"]);
     let extraKeys = [];
     
     if (configuredFields.length > 0) {
@@ -1503,6 +1515,10 @@ tbody tr:hover{background:#EEF2FF}
       // Update status
       statusEl.textContent = `Loaded Projects: ${PROJECTS.length} • Tasks: ${TASKS.length} • Sites: ${SITES.length} (from Azure DevOps)`;
       logDiag('Azure DevOps data loaded and rendered', {projects:PROJECTS.length, tasks:TASKS.length, sites:SITES.length});
+      
+      // Hide the Azure DevOps configuration section after successful load
+      document.getElementById('devOpsConfig').style.display = 'none';
+      
       hideLoader();
       
       this.textContent = 'Reload from Azure DevOps';
