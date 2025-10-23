@@ -125,6 +125,12 @@ window._spPageContextInfo = window._spPageContextInfo || (function(){
         <input type="text" id="devOpsQuery" class="form-input" 
                placeholder="Leave empty to get all work items">
       </div>
+      <div class="form-group">
+        <label class="form-label" for="devOpsFields">Fields to Display (comma-separated):</label>
+        <input type="text" id="devOpsFields" class="form-input" 
+               placeholder="TaskId,TaskName,TaskType,Status,PlannedDate,CompletedDate,Owner,AreaPath,IterationPath" 
+               value="TaskId,TaskName,TaskType,Status,PlannedDate,CompletedDate,Owner,AreaPath,IterationPath">
+      </div>
     </div>
     <div class="status info">
       <strong>📋 How to get a Personal Access Token:</strong><br>
@@ -550,22 +556,23 @@ tbody tr:hover{background:#EEF2FF}
 
 /* Theme Toggle Button */
 .theme-toggle {
-  position: absolute;
+  position: fixed;
   top: 20px;
   right: 20px;
-  width: 40px;
-  height: 40px;
+  width: 50px;
+  height: 50px;
   border-radius: 50%;
-  border: 1px solid var(--border);
+  border: 2px solid var(--border);
   background: var(--surface);
   color: var(--text);
-  font-size: 18px;
+  font-size: 20px;
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
   transition: all 0.2s ease;
   z-index: 1000;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
 }
 
 .theme-toggle:hover {
@@ -1749,8 +1756,34 @@ Access Token:`);
       {key:"CompletedDate", label:"CompletedDate", get:(r)=> formatDate(r.CompletedDate||r.Completed)},
       {key:"__Source", label:"Source", get:(r)=> r.__Source||'Excel'}
     ];
-    const skipKeys = new Set(["BusinessUnit","Region","Country","Site","Project"]);
-    const extraKeys = Array.from(new Set(rowsN.flatMap(r=>Object.keys(r)))).filter(k=> !skipKeys.has(k) && !baseCols.some(c=>c.key===k || c.label===k));
+    // Get configured fields to display
+    const configuredFields = document.getElementById('devOpsFields')?.value?.split(',').map(f => f.trim()).filter(Boolean) || [];
+    
+    const skipKeys = new Set(["BusinessUnit","Region","Country","Site","Project","Description","__Source"]);
+    let extraKeys = [];
+    
+    if (configuredFields.length > 0) {
+      // Use only configured fields
+      extraKeys = configuredFields.filter(k => 
+        !skipKeys.has(k) && 
+        !baseCols.some(c=>c.key===k || c.label===k)
+      );
+    } else {
+      // Fallback to auto-detection with filtering
+      extraKeys = Array.from(new Set(rowsN.flatMap(r=>Object.keys(r)))).filter(k=> 
+        !skipKeys.has(k) && 
+        !baseCols.some(c=>c.key===k || c.label===k) &&
+        !k.toLowerCase().includes('description') &&
+        !k.toLowerCase().includes('email') &&
+        !k.toLowerCase().includes('comment') &&
+        !k.toLowerCase().includes('note') &&
+        k !== 'id' &&
+        k !== 'url' &&
+        k !== 'rev' &&
+        k !== 'fields'
+      );
+    }
+    
     const allCols = baseCols.concat(extraKeys.map(k=>({key:k,label:k,get:(r)=> r[k]??""})));
     const th = `<tr>${allCols.map(c=>`<th>${c.label}</th>`).join("")}</tr>`;
     const tr = rowsN.map(r=>`<tr>${allCols.map(c=>{
