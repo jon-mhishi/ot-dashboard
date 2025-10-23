@@ -596,13 +596,18 @@ tbody tr:hover{background:#EEF2FF}
   color: #34D399;
 }
 
+[data-theme="dark"] tbody tr:nth-child(even) {
+  background: rgba(30, 41, 59, 0.3);
+}
+
 [data-theme="dark"] tbody tr:hover {
-  background: rgba(59, 130, 246, 0.1);
-  color: var(--text);
+  background: rgba(59, 130, 246, 0.08) !important;
+  color: var(--text) !important;
 }
 
 [data-theme="dark"] tbody tr:hover td {
-  color: var(--text);
+  color: var(--text) !important;
+  background: transparent !important;
 }
 
 /* Theme Toggle Button */
@@ -1847,11 +1852,34 @@ tbody tr:hover{background:#EEF2FF}
         const on=tgl.checked;
         mapEl.style.display=on?'':'none';
         noteEl.style.display=on?'':'none';
-        try{ if(on && window.L && mapRendered){ setTimeout(()=>{ try{ const mEl=document.getElementById('map'); mEl && mEl._leaflet_id && window.L && window.L.Map && window.L.map; map.invalidateSize(); }catch{} }, 50); } }catch{}
-        try{ if(on && window.L && !mapRendered){ /* trigger size calc */ setTimeout(()=>{ try{ window.dispatchEvent(new Event('resize')); map.invalidateSize(); }catch{} }, 100); } }catch{}
+        try{ 
+          if(on && window.L && mapRendered){ 
+            setTimeout(()=>{ 
+              try{ 
+                const mEl=document.getElementById('map'); 
+                if(mEl && mEl._leaflet_id && window.L && window.L.Map && window.L.map){ 
+                  map.invalidateSize(); 
+                }
+              }catch(e){ logDiag('Map invalidateSize error:', e); }
+            }, 50); 
+          }
+        }catch(e){ logDiag('Map toggle error:', e); }
+        try{ 
+          if(on && window.L && !mapRendered){ 
+            /* trigger size calc */ 
+            setTimeout(()=>{ 
+              try{ 
+                window.dispatchEvent(new Event('resize')); 
+                if(typeof map !== 'undefined' && map.invalidateSize) {
+                  map.invalidateSize(); 
+                }
+              }catch(e){ logDiag('Map resize error:', e); }
+            }, 100); 
+          }
+        }catch(e){ logDiag('Map resize error:', e); }
       });
     }
-  }catch{}
+  }catch(e){ logDiag('Map toggle setup error:', e); }
   const chk=document.getElementById('plannerDemo'); if(chk){ chk.addEventListener('change', renderTasks); }
   const chkSpo=document.getElementById('plannerSPO'); if(chkSpo){ chkSpo.addEventListener('change', async ()=>{ try{ if(chkSpo.checked && (!window.OTPlannerSPO || !Array.isArray(window.OTPlannerSPO))){ window.OTPlannerSPO = await fetchPlannerFromSPO(); } }catch{} renderTasks(); }); }
 
@@ -1974,6 +2002,7 @@ tbody tr:hover{background:#EEF2FF}
 
   // ===== Colorful map with robust coords (Leaflet) =====
   let mapRendered=false;
+  let map = null;
   try{
     // Load Leaflet: try local SiteAssets first, then CDN
     async function ensureLeaflet(){
@@ -2034,9 +2063,24 @@ tbody tr:hover{background:#EEF2FF}
       const st=document.createElement('style'); st.setAttribute('data-leaflet-inline','1'); st.textContent=css; document.head.appendChild(st);
       logDiag('Injected inline Leaflet CSS fallback (unconditional)');
     }catch{}
-    if(!leafletOk){ logDiag('Leaflet failed to load; using canvas fallback'); }
+    if(!leafletOk){ 
+      logDiag('Leaflet failed to load; using canvas fallback'); 
+      // Create a simple fallback map display
+      const mapEl = document.getElementById('map');
+      if (mapEl) {
+        mapEl.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:400px;background:#f8fafc;color:#64748b;border:1px solid #e2e8f0;border-radius:8px;"><div style="text-align:center;"><div style="font-size:24px;margin-bottom:8px;">🗺️</div><div>Map unavailable - Leaflet failed to load</div></div></div>';
+        mapRendered = true;
+      }
+      return;
+    }
 
-    const map=L.map('map',{zoomControl:true, preferCanvas:true, scrollWheelZoom:false}).setView([20,0],2);
+    const mapEl = document.getElementById('map');
+    if (!mapEl) {
+      logDiag('Map container not found');
+      return;
+    }
+    
+    map=L.map('map',{zoomControl:true, preferCanvas:true, scrollWheelZoom:false}).setView([20,0],2);
     try{ map.touchZoom.disable(); map.doubleClickZoom.disable(); }catch{}
     // Re-enable zoom on explicit user intent (Ctrl+wheel)
     try{
