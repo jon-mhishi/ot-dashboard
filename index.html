@@ -578,6 +578,33 @@ tbody tr:hover{background:#EEF2FF}
   color: var(--primary-600);
 }
 
+[data-theme="dark"] .box.before {
+  background: rgba(99, 102, 241, 0.1);
+  border-left-color: #6366F1;
+}
+
+[data-theme="dark"] .box.after {
+  background: rgba(16, 185, 129, 0.1);
+  border-left-color: #10B981;
+}
+
+[data-theme="dark"] .box.before b {
+  color: #818CF8;
+}
+
+[data-theme="dark"] .box.after b {
+  color: #34D399;
+}
+
+[data-theme="dark"] tbody tr:hover {
+  background: rgba(59, 130, 246, 0.1);
+  color: var(--text);
+}
+
+[data-theme="dark"] tbody tr:hover td {
+  color: var(--text);
+}
+
 /* Theme Toggle Button */
 .theme-toggle {
   position: fixed;
@@ -1110,6 +1137,9 @@ tbody tr:hover{background:#EEF2FF}
       // Get work items from Azure DevOps
       const workItems = await getDevOpsWorkItems(org, project, token, query);
       
+      // Store original work items for region filtering
+      window.originalWorkItems = workItems;
+      
       // Get exclude paths configuration
       const excludePaths = document.getElementById('devOpsExcludePaths')?.value?.split(',').map(p => p.trim()).filter(Boolean) || ['BAU'];
       
@@ -1135,7 +1165,7 @@ tbody tr:hover{background:#EEF2FF}
       }
       
       PROJECTS = workItems.filter(item => 
-        ['Project', 'Program', 'Epic'].includes(item.fields['System.WorkItemType']) &&
+        ['Project', 'Epic'].includes(item.fields['System.WorkItemType']) &&
         !shouldExcludeItem(item.fields['System.AreaPath'])
       ).map(item => ({
         id: item.id,
@@ -1487,6 +1517,25 @@ tbody tr:hover{background:#EEF2FF}
     const bu=document.getElementById('fBU').value, t=document.getElementById("fType").value, y=document.getElementById("fYear").value, s=document.getElementById("fStatus").value;
     let rows=PROJECTS.slice();
     if(bu){
+      // When filtering by region, include Programs from the original work items
+      if (window.originalWorkItems && window.originalWorkItems.length > 0) {
+        const programItems = window.originalWorkItems.filter(item => 
+          item.fields['System.WorkItemType'] === 'Program' &&
+          !shouldExcludeItem(item.fields['System.AreaPath'])
+        ).map(item => ({
+          id: item.id,
+          Project: item.fields['System.Title'],
+          Status: item.fields['System.State'],
+          Owner: item.fields['System.AssignedTo']?.displayName || '',
+          Region: item.fields['Custom.Region'] || '',
+          ProjectType: 'Program',
+          BusinessUnit: extractBusinessUnit(item.fields['System.AreaPath'] || ''),
+          Year: extractYear(item.fields['System.IterationPath'] || ''),
+          Latitude: null,
+          Longitude: null
+        }));
+        rows = [...rows, ...programItems];
+      }
       // Filter projects by sites that belong to the selected BU (canonical from SITES)
       const buSites = new Set(SITES.filter(s=> getBU(s)===bu).map(s=> normSite(s.Site)));
       rows = rows.filter(r=> buSites.has(normSite(r.Site)));
