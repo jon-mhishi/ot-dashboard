@@ -1128,10 +1128,24 @@ tbody tr:hover{background:#EEF2FF}
       // Helper function to check if area path should be excluded
       const shouldExcludeItem = (areaPath) => {
         if (!areaPath) return false;
-        return excludePaths.some(excludePath => areaPath.includes(excludePath));
+        const areaPathLower = areaPath.toLowerCase();
+        return excludePaths.some(excludePath => areaPathLower.includes(excludePath.toLowerCase()));
       };
       
       // Process work items into our data structure
+      const excludedProjects = workItems.filter(item => 
+        ['Project', 'Program', 'Epic'].includes(item.fields['System.WorkItemType']) &&
+        shouldExcludeItem(item.fields['System.AreaPath'])
+      );
+      
+      if (excludedProjects.length > 0) {
+        logDiag('Excluded projects due to area path filtering:', excludedProjects.map(p => ({
+          id: p.id,
+          title: p.fields['System.Title'],
+          areaPath: p.fields['System.AreaPath']
+        })));
+      }
+      
       PROJECTS = workItems.filter(item => 
         ['Project', 'Program', 'Epic'].includes(item.fields['System.WorkItemType']) &&
         !shouldExcludeItem(item.fields['System.AreaPath'])
@@ -1153,6 +1167,19 @@ tbody tr:hover{background:#EEF2FF}
         Latitude: null, // Not available in DevOps
         Longitude: null // Not available in DevOps
       }));
+      
+      const excludedTasks = workItems.filter(item => 
+        ['Task', 'Bug', 'Issue', 'Requirement', 'Change Request', 'Enhancement'].includes(item.fields['System.WorkItemType']) &&
+        shouldExcludeItem(item.fields['System.AreaPath'])
+      );
+      
+      if (excludedTasks.length > 0) {
+        logDiag('Excluded tasks due to area path filtering:', excludedTasks.map(t => ({
+          id: t.id,
+          title: t.fields['System.Title'],
+          areaPath: t.fields['System.AreaPath']
+        })));
+      }
       
       TASKS = workItems.filter(item => 
         ['Task', 'Bug', 'Issue', 'Requirement', 'Change Request', 'Enhancement'].includes(item.fields['System.WorkItemType']) &&
@@ -1719,7 +1746,9 @@ tbody tr:hover{background:#EEF2FF}
       const years=uniq(PROJECTS.map(p=>p.Year)).sort((a,b)=>String(a).localeCompare(String(b)));
       const statuses=uniq(PROJECTS.map(p=>p.Status||'')).sort();
       const fill=(el,arr,lbl)=>el.innerHTML=`<option value="">All ${lbl||""}</option>`+arr.map(v=>`<option>${v}</option>`).join("");
-      fill(document.getElementById('fBU'), (bus.length?bus:['BEA','BNA','BSA']).sort(), 'Region');
+      // Always show all 3 regions, plus any additional ones found in data
+      const allRegions = [...new Set([...bus, 'BEA', 'BNA', 'BSA'])].sort();
+      fill(document.getElementById('fBU'), allRegions, 'Region');
       fill(document.getElementById("fType"),types,"Types");
       fill(document.getElementById("fYear"),years,"Years");
       fill(document.getElementById("fStatus"),statuses,"Statuses");
@@ -1786,7 +1815,9 @@ tbody tr:hover{background:#EEF2FF}
       const years=uniq(PROJECTS.map(p=>p.Year)).sort((a,b)=>String(a).localeCompare(String(b)));
       const statuses=uniq(PROJECTS.map(p=>p.Status||'')).sort();
       const fill=(el,arr,lbl)=>el.innerHTML=`<option value="">All ${lbl||""}</option>`+arr.map(v=>`<option>${v}</option>`).join("");
-      fill(document.getElementById('fBU'), (bus.length?bus:['BEA','BNA','BSA']).sort(), 'Region');
+      // Always show all 3 regions, plus any additional ones found in data
+      const allRegions = [...new Set([...bus, 'BEA', 'BNA', 'BSA'])].sort();
+      fill(document.getElementById('fBU'), allRegions, 'Region');
       fill(document.getElementById("fType"),types,"Types");
       fill(document.getElementById("fYear"),years,"Years");
       fill(document.getElementById("fStatus"),statuses,"Statuses");
