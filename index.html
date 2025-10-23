@@ -835,6 +835,17 @@ tbody tr:hover{background:#EEF2FF}
   async function initializeMSAL() {
     if (msalInstance) return msalInstance;
     
+    // Wait for MSAL to load
+    let attempts = 0;
+    while (!window.msal && attempts < 50) {
+      await new Promise(resolve => setTimeout(resolve, 100));
+      attempts++;
+    }
+    
+    if (!window.msal) {
+      throw new Error('MSAL library failed to load. Please refresh the page and try again.');
+    }
+    
     const msalConfig = {
       auth: {
         clientId: "00000003-0000-0000-c000-000000000000", // Microsoft Graph
@@ -847,7 +858,7 @@ tbody tr:hover{background:#EEF2FF}
       }
     };
     
-    msalInstance = new msal.PublicClientApplication(msalConfig);
+    msalInstance = new window.msal.PublicClientApplication(msalConfig);
     return msalInstance;
   }
 
@@ -1301,6 +1312,46 @@ tbody tr:hover{background:#EEF2FF}
     try {
       this.disabled = true;
       this.textContent = 'Signing in...';
+      
+      // Check if MSAL is available
+      if (!window.msal) {
+        // Try to load MSAL dynamically
+        const script = document.createElement('script');
+        script.src = 'https://alcdn.msauth.net/browser/2.38.3/js/msal-browser.min.js';
+        script.onload = async () => {
+          try {
+            await authenticateWithSharePoint();
+            this.textContent = 'Signed In';
+            this.style.display = 'none';
+            document.getElementById('btnLoadSharePoint').style.display = 'inline-block';
+            
+            const statusDiv = document.createElement('div');
+            statusDiv.className = 'status success';
+            statusDiv.textContent = 'Successfully signed in to SharePoint!';
+            document.getElementById('sharePointConfig').appendChild(statusDiv);
+            setTimeout(() => statusDiv.remove(), 3000);
+          } catch (error) {
+            this.disabled = false;
+            this.textContent = 'Sign In to SharePoint';
+            const statusDiv = document.createElement('div');
+            statusDiv.className = 'status error';
+            statusDiv.textContent = 'Authentication failed: ' + error.message;
+            document.getElementById('sharePointConfig').appendChild(statusDiv);
+            setTimeout(() => statusDiv.remove(), 5000);
+          }
+        };
+        script.onerror = () => {
+          this.disabled = false;
+          this.textContent = 'Sign In to SharePoint';
+          const statusDiv = document.createElement('div');
+          statusDiv.className = 'status error';
+          statusDiv.textContent = 'Failed to load authentication library. Please refresh the page.';
+          document.getElementById('sharePointConfig').appendChild(statusDiv);
+          setTimeout(() => statusDiv.remove(), 5000);
+        };
+        document.head.appendChild(script);
+        return;
+      }
       
       await authenticateWithSharePoint();
       
