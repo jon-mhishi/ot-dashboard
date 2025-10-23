@@ -61,6 +61,7 @@ window._spPageContextInfo = window._spPageContextInfo || (function(){
   <div class="brand">
     <img id="brandLogo" alt="Bunge" class="logo"/>
     <h1 style="color:#000">Global OT Infrastructure Improvements <span style="color:#DC2626">(under development)</span></h1>
+    <button id="themeToggle" class="theme-toggle" title="Toggle Dark Mode">🌙</button>
   </div>
 
   <!-- Help message for SharePoint mode -->
@@ -117,7 +118,7 @@ window._spPageContextInfo = window._spPageContextInfo || (function(){
       <div class="form-group">
         <label class="form-label" for="devOpsToken">Personal Access Token:</label>
         <input type="password" id="devOpsToken" class="form-input" 
-               placeholder="Enter your Azure DevOps PAT" value="8Bae4u0qdWcfbfey5pG07f0lVZPQn1jgAtKQumezBR63dzgTXtGkJQQJ99BJACAAAAAQzySRAAASAZDO4ePm">
+               placeholder="Enter your Azure DevOps PAT">
       </div>
       <div class="form-group">
         <label class="form-label" for="devOpsQuery">Work Items Query (optional):</label>
@@ -395,6 +396,190 @@ tbody tr:hover{background:#EEF2FF}
   background: #e0f2fe;
   border: 1px solid #81d4fa;
   color: #0277bd;
+}
+
+/* Dark Mode Styles */
+[data-theme="dark"] {
+  --text: #E2E8F0;
+  --muted: #94A3B8;
+  --border: #334155;
+  --borderStrong: #475569;
+  --bg: #0F172A;
+  --surface: #1E293B;
+  --kpi: #1E293B;
+  --primary: #3B82F6;
+  --primary-600: #2563EB;
+  --accent: #10B981;
+  --accent-600: #059669;
+  --warn: #F59E0B;
+  --danger: #EF4444;
+  --green: #10B981;
+  --orange: #F59E0B;
+  --gray: #64748B;
+  --ring: rgba(59, 130, 246, 0.35);
+}
+
+[data-theme="dark"] .brand {
+  background: linear-gradient(180deg, rgba(59, 130, 246, 0.1), rgba(16, 185, 129, 0.08));
+  border-color: var(--border);
+}
+
+[data-theme="dark"] .brand h1 {
+  color: var(--text) !important;
+}
+
+[data-theme="dark"] .theme-toggle {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  color: var(--text);
+}
+
+[data-theme="dark"] .theme-toggle:hover {
+  background: var(--primary);
+  color: white;
+}
+
+[data-theme="dark"] .form-input {
+  background: var(--surface);
+  border-color: var(--border);
+  color: var(--text);
+}
+
+[data-theme="dark"] .form-input:focus {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px var(--ring);
+}
+
+[data-theme="dark"] .status.success {
+  background: #064e3b;
+  border-color: #065f46;
+  color: #6ee7b7;
+}
+
+[data-theme="dark"] .status.error {
+  background: #7f1d1d;
+  border-color: #991b1b;
+  color: #fca5a5;
+}
+
+[data-theme="dark"] .status.info {
+  background: #1e3a8a;
+  border-color: #1d4ed8;
+  color: #93c5fd;
+}
+
+[data-theme="dark"] .config-section {
+  background: var(--surface);
+  border-color: var(--border);
+}
+
+[data-theme="dark"] .card {
+  background: var(--surface);
+  border-color: var(--border);
+}
+
+[data-theme="dark"] .card .label {
+  color: var(--muted);
+}
+
+[data-theme="dark"] .card .value {
+  color: var(--text);
+}
+
+[data-theme="dark"] .filters {
+  background: var(--surface);
+  border-color: var(--border);
+}
+
+[data-theme="dark"] select {
+  background: var(--surface);
+  border-color: var(--border);
+  color: var(--text);
+}
+
+[data-theme="dark"] .btn {
+  background: var(--surface);
+  border-color: var(--border);
+  color: var(--text);
+}
+
+[data-theme="dark"] .btn:hover {
+  background: var(--primary);
+  color: white;
+}
+
+[data-theme="dark"] .btn.primary {
+  background: var(--primary);
+  color: white;
+}
+
+[data-theme="dark"] .btn.primary:hover {
+  background: var(--primary-600);
+}
+
+[data-theme="dark"] .table-wrap {
+  background: var(--surface);
+  border-color: var(--border);
+}
+
+[data-theme="dark"] .table-wrap th {
+  background: var(--bg);
+  color: var(--text);
+  border-color: var(--border);
+}
+
+[data-theme="dark"] .table-wrap td {
+  border-color: var(--border);
+  color: var(--text);
+}
+
+[data-theme="dark"] .kpi {
+  background: var(--surface);
+  border-color: var(--border);
+}
+
+[data-theme="dark"] .meta {
+  color: var(--muted);
+}
+
+[data-theme="dark"] .err {
+  background: #7f1d1d;
+  border-color: #991b1b;
+  color: #fca5a5;
+}
+
+/* Theme Toggle Button */
+.theme-toggle {
+  position: absolute;
+  top: 20px;
+  right: 20px;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  font-size: 18px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+  z-index: 1000;
+}
+
+.theme-toggle:hover {
+  background: var(--primary);
+  color: white;
+  transform: scale(1.1);
+}
+
+[data-theme="dark"] .theme-toggle {
+  content: "☀️";
+}
+
+[data-theme="light"] .theme-toggle {
+  content: "🌙";
 }
 </style>
 
@@ -1608,6 +1793,38 @@ Access Token:`);
     document.getElementById('btnLoadSharePoint').style.display = 'inline-block';
     document.getElementById('btnManualAuth').style.display = 'inline-block';
   }
+
+  // Theme toggle functionality
+  function initializeTheme() {
+    const savedTheme = localStorage.getItem('ot-dashboard-theme') || 'light';
+    document.documentElement.setAttribute('data-theme', savedTheme);
+    updateThemeToggleIcon(savedTheme);
+  }
+
+  function toggleTheme() {
+    const currentTheme = document.documentElement.getAttribute('data-theme');
+    const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
+    
+    document.documentElement.setAttribute('data-theme', newTheme);
+    localStorage.setItem('ot-dashboard-theme', newTheme);
+    updateThemeToggleIcon(newTheme);
+    
+    logDiag('Theme changed to:', newTheme);
+  }
+
+  function updateThemeToggleIcon(theme) {
+    const toggle = document.getElementById('themeToggle');
+    if (toggle) {
+      toggle.textContent = theme === 'dark' ? '☀️' : '🌙';
+      toggle.title = theme === 'dark' ? 'Switch to Light Mode' : 'Switch to Dark Mode';
+    }
+  }
+
+  // Initialize theme on page load
+  initializeTheme();
+
+  // Theme toggle event listener
+  document.getElementById('themeToggle').addEventListener('click', toggleTheme);
 
   // Data source UI event listeners
   document.getElementById('dataSourceExcel').addEventListener('change', function() {
