@@ -1,0 +1,1728 @@
+<!-- OT Dashboard (Excel + SharePoint, compact status, colorful map, robust coords) -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+<!-- MSAL.js for Microsoft authentication -->
+<script src="https://alcdn.msauth.net/browser/2.38.3/js/msal-browser.min.js"></script>
+<style>
+  [data-automation-id="CanvasControl"]{margin-left:0 !important;margin-right:calc(50% - 50vw) !important;width:100vw !important;}
+  [data-automation-id="CanvasZone"]{max-width:none !important;padding-left:0 !important;padding-right:0 !important;}
+</style>
+
+
+
+<script>
+// Provide _spPageContextInfo early if Script Editor runs before SPO defines it
+window._spPageContextInfo = window._spPageContextInfo || (function(){
+  var m = location.pathname.match(/^\/(sites|teams)\/[^\/]+/);
+  var rel = m ? m[0] : '';
+  return { webAbsoluteUrl: location.origin + rel, webServerRelativeUrl: rel || '/' };
+})();
+</script>
+
+<script>
+(function(){
+  try{
+    var dbg = location.search.indexOf('debug=1')!==-1;
+    if(!dbg) return; // only enable overlay when debug=1
+    if(window.OTDiagInit) return; window.OTDiagInit=true;
+    function initDiag(){
+      try{
+        var panel=document.createElement('div'); panel.id='otdiag_panel';
+        panel.setAttribute('style','position:fixed;right:12px;bottom:48px;z-index:99999;width:420px;max-height:40vh;overflow:auto;background:#fff;border:1px solid #e5e7eb;border-radius:8px;padding:8px;font-family:ui-monospace,monospace;font-size:12px;display:none;white-space:pre-wrap');
+        document.addEventListener('keydown', function(ev){ if(ev.key==='`' && ev.ctrlKey){ panel.style.display = (panel.style.display==='none'||!panel.style.display)? '' : 'none'; } });
+        document.body.appendChild(panel);
+        var logs=[];
+        window.OTDiagLog=function(){ try{ var a=[].slice.call(arguments); var line=a.map(function(v){ try{ return (typeof v==='string')? v : JSON.stringify(v);}catch{return String(v)} }).join(' '); var ts=new Date().toISOString().substring(11,19); logs.push('['+ts+'] '+line); if(logs.length>1000) logs.shift(); panel.textContent=logs.slice(-500).join('\n'); }catch{} };
+        window.addEventListener('error', function(e){ window.OTDiagLog('window.error', e.message, (e.filename||'')+':'+(e.lineno||'')+':'+(e.colno||'')); });
+        window.addEventListener('unhandledrejection', function(e){ var r=e&&e.reason; window.OTDiagLog('unhandledrejection', (r&&(r.message||r))||String(r)); });
+        try{
+          var oe=console.error.bind(console), ow=console.warn.bind(console), ol=console.log.bind(console);
+          console.error=function(){ window.OTDiagLog('console.error', arguments[0] instanceof Error? (arguments[0].stack||arguments[0].message): arguments[0], arguments[1]||''); oe.apply(console, arguments); };
+          console.warn=function(){ window.OTDiagLog('console.warn', arguments[0]||''); ow.apply(console, arguments); };
+          console.log=function(){ if(location.search.indexOf('debug=1')!==-1){ try{ window.OTDiagLog('console.log', arguments[0]||''); }catch{} } ol.apply(console, arguments); };
+        }catch{}
+        window.OTDiagGet=function(){ return logs.join('\n'); };
+        window.OTDiagCopy=function(){ try{ navigator.clipboard.writeText(window.OTDiagGet()); window.OTDiagLog('copied to clipboard'); }catch{} };
+        window.OTDiagLog('OT diagnostics overlay ready');
+      }catch{}
+    }
+    if(document.body) initDiag(); else document.addEventListener('DOMContentLoaded', initDiag);
+  }catch{}
+})();
+</script>
+
+<div id="otapp" data-inited="0" data-theme="looker">
+  <div class="brand">
+    <img id="brandLogo" alt="Bunge" class="logo"/>
+    <h1 style="color:#000">Global OT Infrastructure Improvements <span style="color:#DC2626">(under development)</span></h1>
+  </div>
+
+  <!-- Compact “friendly” status -->
+  <div id="status" class="meta" style="margin:4px 0 10px 0"></div>
+
+  <!-- Loading bar -->
+  <div id="loader" class="loader" aria-live="polite">
+    <div class="loader-row">
+      <div id="loaderText" class="loader-text">Loading…</div>
+      <div class="loader-bar"><span id="loaderFill" style="width:0%"></span></div>
+    </div>
+  </div>
+
+  <!-- Data Source Selection -->
+  <div class="filters">
+    <label style="display:flex;align-items:center;gap:8px">
+      <input type="radio" name="dataSource" value="excel" id="dataSourceExcel" checked/>
+      <span>Excel Files</span>
+    </label>
+    <label style="display:flex;align-items:center;gap:8px">
+      <input type="radio" name="dataSource" value="sharepoint" id="dataSourceSharePoint"/>
+      <span>SharePoint Lists</span>
+    </label>
+    <button id="btnAuth" class="btn primary" style="display:none">Sign In to SharePoint</button>
+    <button id="btnLoadSharePoint" class="btn primary" style="display:none">Load from SharePoint</button>
+  </div>
+
+  <!-- SharePoint Configuration (hidden by default) -->
+  <div id="sharePointConfig" class="config-section" style="display:none;">
+    <h3>SharePoint Configuration</h3>
+    <div class="config-grid">
+      <div class="form-group">
+        <label class="form-label" for="corporateUrl">Corporate SharePoint URL:</label>
+        <input type="text" id="corporateUrl" class="form-input" 
+               placeholder="https://bunge.sharepoint.com/sites/OTGlobalInfrastructure" 
+               value="https://bunge.sharepoint.com/sites/OTGlobalInfrastructure">
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="projectsList">Projects List Name:</label>
+        <input type="text" id="projectsList" class="form-input" 
+               placeholder="Projects" value="Projects">
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="tasksList">Tasks List Name:</label>
+        <input type="text" id="tasksList" class="form-input" 
+               placeholder="Tasks" value="Tasks">
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="sitesList">Sites List Name:</label>
+        <input type="text" id="sitesList" class="form-input" 
+               placeholder="SitesInventory" value="SitesInventory">
+      </div>
+    </div>
+  </div>
+
+  <div class="filters">
+    <select id="fBU" title="Business Unit"></select>
+    <select id="fType" title="Project Type"></select>
+    <select id="fYear" title="Year"></select>
+    <select id="fStatus" title="Status"></select>
+    <button id="btnExport" class="btn">Export CSV</button>
+    <button id="btnDiag" class="btn primary">Diagnostics</button>
+    <button id="btnCopyDiag" class="btn primary">Copy Logs</button>
+  </div>
+
+  <div id="err" class="err" style="display:none"></div>
+
+  <div id="kpiProjects" class="kpi"></div>
+  <div id="kpiInventory" class="kpi"></div>
+
+  <h3 id="mapTitle">Sites map</h3>
+  <div class="filters"><label style="display:flex;align-items:center;gap:8px"><input type="checkbox" id="toggleMap"/> Show map</label></div>
+  <div id="map" class="map" style="display:none"></div>
+  <div class="map-note" id="mapNote" style="display:none"></div>
+  <div id="diag" class="diag" style="display:none"></div>
+
+  <h3>Projects</h3>
+  <div id="cards"></div>
+
+  <h3>Tasks drill-down</h3>
+  <div class="filters"><select id="sitePick" title="Site"></select></div>
+  <div class="filters">
+    <label style="display:flex;align-items:center;gap:8px"><input type="checkbox" id="plannerDemo"/> Include Planner demo tasks</label>
+    <input id="plannerPlanId" title="Planner Plan ID (future)" placeholder="Planner Plan ID (future)"/>
+    <label style="display:flex;align-items:center;gap:8px"><input type="checkbox" id="plannerSPO"/> Include Planner (SharePoint sync)</label>
+  </div>
+  <div id="taskStatus" class="kpi small"></div>
+  <div id="tasks" class="table-wrap"></div>
+</div>
+
+<style>
+:root{--text:#0F172A;--muted:#64748B;--border:#E2E8F0;--borderStrong:#CBD5E1;--bg:#F8FAFC;--surface:#FFFFFF;--kpi:#FFFFFF;--primary:#0EA5E9;--primary-600:#0284C7;--accent:#22C55E;--accent-600:#16A34A;--warn:#D97706;--danger:#DC2626;--green:#059669;--orange:#D97706;--gray:#64748B;--ring:rgba(14,165,233,.35)}
+#otapp{max-width:1440px;width:100%;margin:8px auto 20px;padding:0 20px;box-sizing:border-box;font-family:Inter, "Segoe UI", system-ui, Arial;color:var(--text);background:var(--bg)}
+h1{margin:0 0 6px} h3{margin:14px 0 8px}
+.brand{display:flex;align-items:flex-end;gap:16px;margin:12px 0 14px;background:linear-gradient(180deg, rgba(14,165,233,.06), rgba(34,197,94,.04));border:1px solid var(--border);border-radius:14px;padding:12px 14px}
+.brand .logo{height:40px;margin-top:2px}
+.brand h1{font-size:26px;font-weight:800;letter-spacing:.3px;line-height:1.1;padding-bottom:2px;margin-top:14px;position:relative;top:6px}
+.filters{margin:8px 0;display:flex;gap:10px;flex-wrap:wrap;background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:8px 10px}
+select,.btn{height:36px;padding:6px 10px;border:1px solid var(--border);border-radius:8px;background:var(--surface);color:var(--text);transition:box-shadow .15s ease, transform .05s ease, border-color .15s ease}
+.btn{cursor:pointer;background:linear-gradient(180deg, rgba(255,255,255,.9), rgba(248,250,252,.9))}
+.btn:hover{transform:translateY(-1px);box-shadow:0 6px 14px rgba(2,132,199,.08)}
+select:focus,.btn:focus{outline:0;box-shadow:0 0 0 3px var(--ring);border-color:var(--primary)}
+.kpi{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin:10px 0}
+.kpi .card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:12px 14px;box-shadow:0 1px 2px rgba(2,6,23,.04);transition:box-shadow .2s ease, transform .12s ease, border-color .15s ease}
+.kpi .card:hover{transform:translateY(-1px);box-shadow:0 8px 24px rgba(2,6,23,.08);border-color:var(--borderStrong)}
+.kpi .label{color:var(--muted);font-size:13px}
+.kpi .value{font-size:26px;font-weight:700;margin-top:4px}
+.kpi.small .value{font-size:22px}
+.err{background:#FEE2E2;color:#991B1B;border:1px solid #FECACA;border-radius:8px;padding:10px;margin:8px 0}
+.meta{color:var(--muted);font-size:12px}
+.row{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:16px;margin:12px 0;box-shadow:0 1px 2px rgba(2,6,23,.04);transition:box-shadow .2s ease, transform .12s ease, border-color .15s ease}
+.row:hover{transform:translateY(-1px);box-shadow:0 10px 28px rgba(2,6,23,.09);border-color:var(--borderStrong)}
+.top{display:flex;justify-content:space-between;gap:8px;margin-bottom:6px}
+.pill{padding:2px 8px;border-radius:999px;color:#fff;font-size:12px;align-self:flex-start}
+.done{background:var(--green)} .prog{background:var(--orange)} .other{background:var(--gray)}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:8px}
+.box{border:1px solid var(--border);border-radius:10px;padding:10px}
+.box.before{background:#EEF2FF;border-left:4px solid #6366F1}
+.box.after{background:#ECFDF5;border-left:4px solid #10B981}
+.box.before b{color:#4F46E5}
+.box.after b{color:#059669}
+.bu{display:inline-flex;align-items:center;justify-content:center;height:22px;padding:0 10px;border-radius:999px;color:#fff;font-size:12px;font-weight:600;margin-left:8px;line-height:22px}
+.bu-BEA{background:#2563EB}
+.bu-BNA{background:#0EA5E9}
+.bu-BSA{background:#10B981}
+.kpi.bu-strip{grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:8px;margin-top:8px}
+.kpi .card.bu{display:flex;align-items:center;justify-content:center;gap:8px;padding:6px 10px;border:none;color:#fff;border-radius:10px}
+.kpi .card.bu .label{color:#fff;font-size:13px;font-weight:700}
+.kpi .card.bu .value{font-size:18px;font-weight:800;margin:0}
+.kpi .card.bu.BEA{background:#2563EB}
+.kpi .card.bu.BNA{background:#0EA5E9}
+.kpi .card.bu.BSA{background:#10B981}
+.map{height:clamp(320px,48vh,560px);border:1px solid var(--border);border-radius:12px;box-shadow:0 1px 2px rgba(0,0,0,.05);margin:8px 0;background:#fff}
+.map-note{font-size:12px;color:var(--muted);margin:4px 2px}
+.diag{font-family:ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; font-size:12px; border:1px solid var(--border); border-radius:8px; background:#fff; padding:8px; margin:8px 0; max-height:240px; overflow:auto; white-space:pre-wrap}
+.table-wrap{overflow:auto;border:1px solid var(--border);border-radius:8px;max-height:clamp(260px,52vh,620px);-webkit-overflow-scrolling:touch}
+table{width:100%;border-collapse:collapse;table-layout:fixed}
+th,td{padding:10px;border-top:1px solid var(--border);text-align:left;font-size:14px;word-break:break-word}
+thead th{position:sticky;top:0;background:#F1F5F9;color:#0F172A;z-index:1;box-shadow:inset 0 -1px 0 var(--borderStrong)}
+tbody tr:nth-child(even){background:#F8FAFC}
+tbody tr:hover{background:#EEF2FF}
+.status-badge{display:inline-block;padding:2px 8px;border-radius:999px;font-size:12px;font-weight:600;color:#fff}
+.status-planned{background:#6B7280}
+.status-inprogress{background:#D97706}
+.status-completed{background:#059669}
+.status-blocked{background:#DC2626}
+.status-dot{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:6px;vertical-align:middle}
+.status-dot.planned{background:#6B7280}
+.status-dot.inprogress{background:#D97706}
+.status-dot.completed{background:#059669}
+.status-dot.blocked{background:#DC2626}
+.loader{background:#fff;border:1px solid var(--border);border-radius:10px;padding:10px 12px;margin:8px 0;will-change:opacity,transform}
+.loader-row{display:flex;gap:12px;align-items:center}
+.loader-text{font-size:13px;color:#6B7280;min-width:200px}
+.loader-bar{flex:1;height:8px;background:#F1F5F9;border-radius:999px;overflow:hidden;border:1px solid #E2E8F0}
+.loader-bar span{display:block;height:100%;background:linear-gradient(90deg,#0EA5E9,#22C55E,#0EA5E9);background-size:200% 100%;border-radius:999px;transition:width .25s ease;animation:sheen 1.2s linear infinite}
+.loader-bar span.complete{width:100% !important}
+@keyframes fadeOut{to{opacity:0;transform:translateY(-4px);visibility:hidden}}
+.loader.is-done{animation:fadeOut .35s ease forwards}
+@media (prefers-reduced-motion: reduce){
+  .btn,.row,.kpi .card,.loader-bar span{transition:none}
+  .loader-bar span{animation:none}
+}
+
+/* Small-screen polish */
+@media (max-width: 680px){
+  .grid{grid-template-columns:1fr}
+  .kpi{grid-template-columns:repeat(auto-fit,minmax(140px,1fr))}
+  .row{padding:12px}
+  .loader-text{min-width:auto;font-size:12px}
+}
+
+@keyframes sheen{0%{background-position:0% 0%}100%{background-position:200% 0%}}
+
+/* Dark mode disabled by request (force light theme) */
+</style>
+
+<style>
+/* Subtle custom scrollbars (supported browsers) */
+.table-wrap::-webkit-scrollbar{height:10px;width:10px}
+.table-wrap::-webkit-scrollbar-thumb{background:#CBD5E1;border-radius:999px}
+.table-wrap::-webkit-scrollbar-track{background:#F1F5F9;border-radius:999px}
+</style>
+
+<style>
+/* Looker-inspired theme (scoped) */
+#otapp[data-theme="looker"]{
+  --text:#1F2937; --muted:#6B7280; --bg:#F9FAFB; --surface:#FFFFFF; --kpi:#FFFFFF;
+  --border:#E5E7EB; --borderStrong:#D1D5DB;
+  --primary:#1A73E8; --primary-600:#1669C1;
+  --accent:#9333EA; --accent-600:#7E22CE;
+  --ring:rgba(26,115,232,.28);
+}
+#otapp[data-theme="looker"] .brand{background:#fff;border-color:var(--borderStrong)}
+#otapp[data-theme="looker"] .btn{background:#fff;color:var(--primary);border-color:var(--borderStrong)}
+#otapp[data-theme="looker"] .btn.primary{background:linear-gradient(180deg, rgba(255,255,255,.96), rgba(249,250,251,.96));color:#fff;border-color:var(--primary);background-color:var(--primary)}
+#otapp[data-theme="looker"] .btn.primary{background:var(--primary);color:#fff;border-color:var(--primary)}
+#otapp[data-theme="looker"] .btn:hover{transform:translateY(-1px);box-shadow:0 6px 14px rgba(26,115,232,.10);border-color:var(--primary)}
+#otapp[data-theme="looker"] .btn.primary:hover{box-shadow:0 8px 18px rgba(26,115,232,.18);filter:saturate(1.05)}
+#otapp[data-theme="looker"] .kpi .card{box-shadow:none;border-color:var(--borderStrong)}
+#otapp[data-theme="looker"] thead th{background:#F3F6FC;color:#111827;box-shadow:inset 0 -1px 0 var(--borderStrong)}
+#otapp[data-theme="looker"] tbody tr:hover{background:#EFF6FF}
+#otapp[data-theme="looker"] .row:hover{box-shadow:0 8px 24px rgba(17,24,39,.08)}
+#otapp[data-theme="looker"] .pill.done{background:#22C55E}
+#otapp[data-theme="looker"] .pill.prog{background:#F59E0B}
+#otapp[data-theme="looker"] .pill.other{background:#6B7280}
+#otapp[data-theme="looker"] .status-dot.inprogress{background:#F59E0B}
+#otapp[data-theme="looker"] .status-dot.completed{background:#22C55E}
+#otapp[data-theme="looker"] .status-dot.planned{background:#9CA3AF}
+#otapp[data-theme="looker"] .status-dot.blocked{background:#EF4444}
+#otapp[data-theme="looker"] .loader-bar{border-color:#D1E3FF;background:#E9F2FF}
+#otapp[data-theme="looker"] .loader-bar span{background:linear-gradient(90deg,#1A73E8,#9333EA,#1A73E8)}
+#otapp[data-theme="looker"] .filters{border-color:var(--borderStrong)}
+</style>
+
+<!-- Additional styles for SharePoint configuration -->
+<style>
+.config-section {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 20px;
+  margin: 20px 0;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+}
+
+.config-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 20px;
+  margin-bottom: 20px;
+}
+
+.form-group {
+  display: flex;
+  flex-direction: column;
+}
+
+.form-label {
+  font-weight: 600;
+  color: var(--text);
+  margin-bottom: 8px;
+  font-size: 14px;
+}
+
+.form-input {
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-size: 14px;
+  transition: border-color 0.2s;
+}
+
+.form-input:focus {
+  outline: none;
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px var(--ring);
+}
+
+.status {
+  padding: 12px 16px;
+  border-radius: 8px;
+  margin: 16px 0;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.status.success {
+  background: #d1fae5;
+  border: 1px solid #a7f3d0;
+  color: #065f46;
+}
+
+.status.error {
+  background: #fee2e2;
+  border: 1px solid #fecaca;
+  color: #991b1b;
+}
+
+.status.info {
+  background: #e0f2fe;
+  border: 1px solid #81d4fa;
+  color: #0277bd;
+}
+</style>
+
+<script>
+(async()=>{
+  logDiag('OT init start');
+  // Prevent double init if SP re-renders the web part
+  const root = document.getElementById('otapp');
+  if(!root || root.dataset.inited === '1'){ return; }
+  root.dataset.inited = '1';
+
+  const siteUrl=_spPageContextInfo.webAbsoluteUrl;
+  const urlParams = new URLSearchParams(location.search);
+  const VERBOSE = urlParams.get('debug') === '1'; // quiet by default
+  const PLANNER_ENABLED = urlParams.get('planner') === '1';
+  const PLANNER_SPO_ENABLED = urlParams.get('plannerspo') === '1';
+  
+  // SharePoint integration variables
+  let accessToken = null;
+  let siteId = null;
+  let msalInstance = null;
+  const IS_DEV = (function(){
+    try{
+      if(urlParams.get('dev')==='1') return true;
+      if(location.protocol==='file:') return true;
+      const h=(location.hostname||'').toLowerCase();
+      if(h==='localhost' || h==='127.0.0.1') return true;
+      if(!/(sharepoint|microsoftonline|office)/i.test(h)) return true;
+    }catch{}
+    return false;
+  })();
+
+  const showErr=m=>{const e=document.getElementById("err");e.style.display="";e.textContent=m};
+  const statusEl=document.getElementById('status');
+  const diagEl=document.getElementById('diag');
+  const btnDiag=document.getElementById('btnDiag');
+  const btnCopyDiag=document.getElementById('btnCopyDiag');
+  const diagLogs=[]; window.OTDiagBuffer = diagLogs;
+  function logDiag(...args){
+    try{
+      const line = args.map(v=>{ try{ if(typeof v==='string') return v; return JSON.stringify(v); }catch{return String(v)} }).join(' ');
+      const ts = new Date().toISOString().substring(11,19);
+      diagLogs.push(`[${ts}] ${line}`);
+      if(diagEl){ diagEl.textContent = diagLogs.slice(-500).join('\n'); }
+      try{ if(typeof window.OTDiagLog==='function'){ window.OTDiagLog.apply(null, args); } }catch{}
+      if(VERBOSE) console.log('[OT-DIAG]', ...args);
+    }catch{}
+  }
+  try{
+    window.addEventListener('error', (e)=>{ logDiag('window.error', {msg:e.message, src:e.filename, line:e.lineno, col:e.colno}); });
+    window.addEventListener('unhandledrejection', (e)=>{ logDiag('unhandledrejection', {reason: (e.reason && (e.reason.message||e.reason)) || String(e.reason)}); });
+    const origErr=console.error.bind(console), origWarn=console.warn.bind(console), origLog=console.log.bind(console);
+    console.error=(...a)=>{ logDiag('console.error', ...a); origErr(...a); };
+    console.warn=(...a)=>{ logDiag('console.warn', ...a); origWarn(...a); };
+    console.log=(...a)=>{ if(VERBOSE) logDiag('console.log', ...a); origLog(...a); };
+  }catch{}
+  // Hide diagnostics controls in normal mode (only show when debug=1)
+  try{ if(location.search.indexOf('debug=1')===-1){ if(btnDiag) btnDiag.style.display='none'; if(btnCopyDiag) btnCopyDiag.style.display='none'; if(diagEl) diagEl.style.display='none'; } }catch{}
+  if(btnDiag){ btnDiag.onclick=()=>{ const v=diagEl.style.display!==''; diagEl.style.display=v?'':'none'; btnDiag.textContent = v? 'Hide Diagnostics':'Diagnostics'; }; }
+  if(btnCopyDiag){ btnCopyDiag.onclick=()=>{ try{ navigator.clipboard.writeText(diagLogs.join('\n')); btnCopyDiag.textContent='Copied'; setTimeout(()=>btnCopyDiag.textContent='Copy Logs',1200);}catch{} } }
+
+  // Loader UI
+  const loaderEl=document.getElementById('loader');
+  const loaderText=document.getElementById('loaderText');
+  const loaderFill=document.getElementById('loaderFill');
+  const steps=["Starting","Loading Excel engine","Finding files","Projects","Tasks","Sites","Rendering"];
+  let stepIdx=0;
+  function setLoader(text){ if(text) loaderText.textContent=text; loaderFill.style.width=Math.round((stepIdx/steps.length)*100)+"%"; }
+  function next(text){ stepIdx=Math.min(stepIdx+1,steps.length); setLoader(text || steps[stepIdx]+'…'); }
+  function hideLoader(){
+    try{
+      loaderFill.classList.add('complete');
+      loaderFill.style.width='100%';
+      loaderEl.classList.add('is-done');
+      setTimeout(()=>{ loaderEl.style.display='none'; }, 380);
+    }catch{ loaderEl.style.display='none'; }
+  }
+  const debugLog=[]; const note=(m)=>{ if(VERBOSE){ debugLog.push(m); console.debug(m); } logDiag(String(m)); };
+
+  try{
+    const wp = root.closest('[data-automation-id="CanvasControl"], .ControlZone');
+    if(wp){
+      wp.style.marginLeft='calc(50% - 50vw)'; wp.style.marginRight='calc(50% - 50vw)'; wp.style.width='100vw';
+      const zone = wp.closest('[data-automation-id="CanvasZone"], .CanvasZone');
+      if(zone){ zone.style.maxWidth='none'; zone.style.paddingLeft='0'; zone.style.paddingRight='0'; }
+    }
+  }catch{}
+
+  // === CONFIG (Excel only) ===
+  const FILE_PATHS = {
+    projects: '/sites/GlobalOTInfrastructure/SiteAssets/ot/projects.xlsx',
+    tasks:    '/sites/GlobalOTInfrastructure/SiteAssets/ot/tasks.xlsx',
+    sites:    '/sites/GlobalOTInfrastructure/SiteAssets/ot/sites_inventory.xlsx'
+  };
+  const SPO_PLANNER_LIST = 'OT Planner Tasks';
+  // If known, prefer the exact list GUID to avoid any title/path/locale issues
+  const SPO_PLANNER_LIST_ID = '89a959e1-e862-4c9b-9d47-e7b5d1537ee9';
+
+  // Logo
+  try{
+    const logoEl = document.getElementById('brandLogo');
+    const base = siteUrl.replace(/\/$/, '');
+    const candidates = (IS_DEV
+      ? [
+          'logo_netbox_dark_teal.svg',
+          './logo_netbox_dark_teal.svg',
+          'logo_netbox_dark_teal.png',
+          './logo_netbox_dark_teal.png'
+        ]
+      : [
+          base + '/SiteAssets/ot/logo_netbox_dark_teal.svg',
+          base + '/SiteAssets/logo_netbox_dark_teal.svg',
+          base + '/SiteAssets/ot/logo_netbox_dark_teal.png',
+          base + '/SiteAssets/logo_netbox_dark_teal.png',
+          base + '/SiteAssets/ot/bungelogo.png',
+          base + '/SiteAssets/bungelogo.png'
+        ]);
+    (function nextLogo(i){
+      if(i>=candidates.length) return;
+      const img=new Image();
+      img.onload=()=>{ logoEl.src=candidates[i]; };
+      img.onerror=()=>nextLogo(i+1);
+      img.src=candidates[i];
+    })(0);
+  }catch{}
+
+  // === Static snapshot (Azure Blob/JSON) support ===
+  // Defaults to ON (snapshots first). Disable with ?snapshots=0. Configure base with ?snapbase=<url or SAS>.
+  const USE_SNAPSHOTS = (urlParams.get('snapshots') !== '0');
+  const SNAP_BASE = ((urlParams.get('snapbase')||'').trim()).replace(/\/$/, '');
+  const SNAPSHOT_URLS = {
+    projects: urlParams.get('projectsUrl') || (SNAP_BASE? (SNAP_BASE + '/projects.json') : 'data/projects.json'),
+    tasks:    urlParams.get('tasksUrl')    || (SNAP_BASE? (SNAP_BASE + '/tasks.json')    : 'data/tasks.json'),
+    sites:    urlParams.get('sitesUrl')    || (SNAP_BASE? (SNAP_BASE + '/sites.json')    : 'data/sites.json')
+  };
+  async function fetchJson(u){ try{ if(!u) return null; const r=await fetch(u,{credentials:'omit', cache:'no-store'}); if(!r.ok) return null; return await r.json(); }catch{return null} }
+  let DATA_LOADED=false;
+  let PROJECTS=[],TASKS=[],SITES=[];
+  if(USE_SNAPSHOTS){
+    next("Loading snapshots…");
+    try{
+      const [pj,tj,sj] = await Promise.all([
+        SNAPSHOT_URLS.projects? fetchJson(SNAPSHOT_URLS.projects): Promise.resolve(null),
+        SNAPSHOT_URLS.tasks?    fetchJson(SNAPSHOT_URLS.tasks)   : Promise.resolve(null),
+        SNAPSHOT_URLS.sites?    fetchJson(SNAPSHOT_URLS.sites)   : Promise.resolve(null)
+      ]);
+      if(Array.isArray(pj)){
+        PROJECTS = pj.map(b=>({
+          ...b,
+          BusinessUnit:b.BusinessUnit||b.BU||'',
+          Region:b.Region||b.region,
+          Country:b.Country||b.country,
+          Site:b.Site||b.site,
+          ProjectType:b.ProjectType||b.ProjectTyp||b.projectType,
+          Domain:b.Domain,
+          Category:b.Category,
+          Project:b.Project||b.Title,
+          BeforeState:b.BeforeState||b.BeforeStat,
+          AfterState:b.AfterState,
+          KeyBenefits:b.KeyBenefits||b.KeyBenefi,
+          Year:(isFinite(+b.Year) && String(b.Year).length<=4) ? Number(b.Year) : (String(b.Year||'').match(/^\d{4}$/) ? Number(b.Year) : ''),
+          Status:b.Status,
+          Owner:b.Owner,
+          Latitude:b.Latitude||b.lat||b.Lat,
+          Longitude:b.Longitude||b.lon||b.Lon||b.Lng
+        }));
+      }
+      if(Array.isArray(tj)){
+        TASKS = tj.map(b=>({
+          ...b,
+          BusinessUnit:b.BusinessUnit||b.BU||'',
+          Region:b.Region, Country:b.Country, Site:b.Site,
+          TaskId:b.TaskId||b.TaskID||b.id, TaskName:b.TaskName||b.Task||b.Project||b.Title||'',
+          TaskType:b.TaskType||b.Type||'',
+          Status:b.Status||'',
+          PlannedDate:b.PlannedDate||b.Planned,
+          CompletedDate:b.CompletedDate||b.Completed
+        })).map(normalizeTaskRow);
+      }
+      if(Array.isArray(sj)){
+        SITES = sj.map(b=>({
+          ...b,
+          BusinessUnit:b.BusinessUnit||b.BU||'',
+          Region:b.Region, Country:b.Country, Site:b.Site,
+          UsesNewOTNetworkIP: (b.UsesNewOTNetworkIP ?? b.NewOTNetworkIP ?? b.OTSubnet),
+          MonitoredSolarWindsOT: (b.MonitoredSolarWindsOT ?? b.SolarWinds),
+          MonitoredSinecNMSOT: (b.MonitoredSinecNMSOT ?? b.SINEC),
+          InOTvSphere: (b.InOTvSphere ?? b.OTvSphere),
+          LocalOTDomainController: (b.LocalOTDomainController ?? b.LocalOTDC),
+          OTSubnetCIDR: b.OTSubnetCIDR || b.OTSubnet,
+          EffectiveDate: b.EffectiveDate || b.Effective,
+          Latitude: b.Latitude ?? b.lat ?? b.Lat,
+          Longitude: b.Longitude ?? b.lon ?? b.Lon ?? b.Lng
+        }));
+      }
+      if(PROJECTS.length || TASKS.length || SITES.length){
+        DATA_LOADED=true;
+        logDiag('Snapshots loaded', {projects:PROJECTS.length, tasks:TASKS.length, sites:SITES.length, base:SNAP_BASE||'relative:data/'});
+      }
+    }catch(e){ logDiag('Snapshot load error', e && (e.message||String(e))); }
+  }
+
+  // ===== SheetJS loader (AMD/RequireJS aware) =====
+  next("Loading Excel engine…"); logDiag('ensureXLSX start');
+  function loadScript(src){
+    return new Promise((resolve,reject)=>{
+      const s=document.createElement('script'); s.src=src; s.async=true;
+      s.onload=()=>resolve(true); s.onerror=()=>reject(new Error('load failed: '+src));
+      document.head.appendChild(s);
+    });
+  }
+  function normalizeXLSXNamespace(anyX){
+    if(anyX && typeof anyX.read === 'function') return anyX;
+    if(anyX && anyX.XLSX && typeof anyX.XLSX.read === 'function') return anyX.XLSX;
+    if(anyX && anyX.default && typeof anyX.default.read === 'function') return anyX.default;
+    return null;
+  }
+  async function ensureXLSX(){
+    if (window.XLSX && typeof window.XLSX.read === 'function') return true;
+    const base = _spPageContextInfo.webAbsoluteUrl.replace(/\/$/,'');
+    const devLocal = IS_DEV ? [ 'xlsx.full.min.js', './xlsx.full.min.js' ] : [];
+    const urls = devLocal.concat([
+      base + '/SiteAssets/ot/xlsx.full.min.js',
+      base + '/SiteAssets/xlsx.full.min.js',
+      'https://cdn.sheetjs.com/xlsx-0.20.0/package/dist/xlsx.full.min.js',
+      'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.20.0/xlsx.full.min.js',
+      'https://unpkg.com/xlsx@0.20.0/dist/xlsx.full.min.js',
+      'https://cdn.jsdelivr.net/npm/xlsx@0.20.0/dist/xlsx.full.min.js'
+    ]);
+    for(const u of urls){
+      try{
+        await loadScript(u);
+        let X = normalizeXLSXNamespace(window.XLSX) ||
+                (typeof window.require==='function' ? await new Promise(res=>{ try{ window.require(['xlsx'], m=>res(normalizeXLSXNamespace(m))); }catch{ res(null); } }) : null) ||
+                normalizeXLSXNamespace(window.xlsx) ||
+                normalizeXLSXNamespace(window.XLSX?.default || window.XLSX?.XLSX);
+        if(X){ window.XLSX=X; return true; }
+      }catch(e){ note(e.message); }
+    }
+    return false;
+  }
+  let okXLSX=false; try{ okXLSX = await ensureXLSX(); }catch(e){ logDiag('ensureXLSX threw', (e&&e.message)||String(e)); }
+  logDiag('ensureXLSX result', {ok:okXLSX});
+  if(!okXLSX){ logDiag('XLSX load failed - aborting'); showErr('Failed to load Excel engine.'); hideLoader(); return; }
+  note('XLSX ready');
+
+  // ===== SharePoint fetch helpers (arrayBuffer only) =====
+  next("Finding files…"); logDiag('Finding files phase');
+  const encQ = s => encodeURIComponent(s).replace(/'/g,"%27");
+  function isZip(buf){ try{ const v=new Uint8Array(buf||[]); return v.length>3 && v[0]===0x50 && v[1]===0x4B; }catch{return false} }
+  async function getFileMeta(relPath){
+    try{
+      const base = _spPageContextInfo.webAbsoluteUrl.replace(/\/$/,'');
+      const url  = `${base}/_api/web/GetFileByServerRelativeUrl('${encQ(relPath)}')?$select=Name,Length,TimeLastModified,ServerRelativeUrl`;
+      const r = await fetch(url,{credentials:'same-origin', headers:{Accept:'application/json;odata=nometadata'}});
+      if(!r.ok){ note(`meta ${relPath} → ${r.status}`); return null; }
+      return await r.json();
+    }catch{return null}
+  }
+  async function fetchValue(relPath){
+    try{
+      const site = _spPageContextInfo.webAbsoluteUrl.replace(/\/$/,'');
+      const abs  = `${site}/_api/web/getfilebyserverrelativeurl('${encQ(relPath)}')/$value?ts=${Date.now()}`;
+      const res  = await fetch(abs,{credentials:'same-origin'});
+      note(`$value → ${res.status}`);
+      if(!res.ok) return null;
+      return await res.arrayBuffer();
+    }catch{return null}
+  }
+  async function fetchOpenBinary(relPath){
+    try{
+      const site = _spPageContextInfo.webAbsoluteUrl.replace(/\/$/,'');
+      const abs  = `${site}/_api/web/GetFileByServerRelativeUrl('${encQ(relPath)}')/OpenBinaryStream`;
+      const res  = await fetch(abs,{credentials:'same-origin'});
+      note(`OpenBinaryStream → ${res.status}`);
+      if(!res.ok) return null;
+      return await res.arrayBuffer();
+    }catch{return null}
+  }
+  async function fetchDownloadAspx(relPath){
+    try{
+      const site = _spPageContextInfo.webAbsoluteUrl.replace(/\/$/,'');
+      const abs  = `${site}/_layouts/15/download.aspx?SourceUrl=${encodeURIComponent(relPath)}&ts=${Date.now()}`;
+      const res  = await fetch(abs,{credentials:'same-origin'});
+      note(`download.aspx → ${res.status}`);
+      if(!res.ok) return null;
+      return await res.arrayBuffer();
+    }catch{return null}
+  }
+  async function fetchV2Content(relPath){
+    try{
+      const webRel = _spPageContextInfo.webServerRelativeUrl.replace(/\/$/,'');
+      const trimmed = relPath.startsWith(webRel) ? relPath.slice(webRel.length) : relPath;
+      const site = _spPageContextInfo.webAbsoluteUrl.replace(/\/$/,'');
+      const abs = `${site}/_api/v2.0/drive/root:${encodeURIComponent(trimmed)}:/content?ts=${Date.now()}`;
+      const res = await fetch(abs,{credentials:'same-origin'});
+      note(`v2.0 content → ${res.status}`);
+      if(!res.ok) return null;
+      return await res.arrayBuffer();
+    }catch{return null}
+  }
+  async function fetchBinary(rel){
+    const meta = await getFileMeta(rel);
+    if(!meta){ note('no meta'); }
+    const strategies = [fetchValue, fetchOpenBinary, fetchV2Content, fetchDownloadAspx];
+    for(const fn of strategies){
+      const buf = await fn(rel);
+      if(!buf) continue;
+      if(isZip(buf)){ note(`zip OK via ${fn.name}`); return buf; }
+    }
+    return null;
+  }
+  async function fetchXlsxName(name, explicitRel){
+    const rel = explicitRel || Object.values(FILE_PATHS).find(p=>p.toLowerCase().endsWith('/'+name.toLowerCase()));
+    const buf = await fetchBinary(rel);
+    if(!buf) throw new Error(`not found ${name}`);
+    const wb = XLSX.read(buf,{type:'array', cellDates:true, cellNF:false, cellText:false});
+    let rows=[]; for(const sn of wb.SheetNames){ const ws=wb.Sheets[sn]; rows = rows.concat(XLSX.utils.sheet_to_json(ws,{defval:''})); }
+    return rows;
+  }
+
+  // Try consolidated workbook (multiple sheets in one file)
+  async function fetchConsolidated(names){
+    const nameArr = Array.isArray(names)? names : [names];
+
+    // Dev-first: try local workbook(s) like OTdev.xlsx via relative paths
+    if(IS_DEV){
+      try{
+        const tryNames = Array.from(new Set(nameArr.concat(['OTdev.xlsx','OTdev.xlsm','OT (2).xlsx'])));
+        const paths=[]; const add=(p)=>{ if(paths.indexOf(p)===-1) paths.push(p); };
+        tryNames.forEach(n=>{ add(n); add('./'+n); add('../'+n); add('/'+n); add('/ot_site/'+n); });
+        for(const p of paths){
+          try{
+            const r = await fetch(p,{credentials:'omit'});
+            note(`dev consolidated fetch ${p} → ${r && r.status}`);
+            if(!r || !r.ok) continue;
+            const buf = await r.arrayBuffer();
+            const wb = XLSX.read(buf,{type:'array', cellDates:true, cellNF:false, cellText:false});
+            const getSheet=(names)=>{
+              const lower = wb.SheetNames.map(s=>({name:s, low:s.trim().toLowerCase()}));
+              for(const want of names){ const idx = lower.findIndex(x=> x.low===want); if(idx!==-1) return wb.Sheets[wb.SheetNames[idx]]; }
+              return null;
+            };
+            const wsSites = getSheet(['sites','site','sites_inventory','sites inventory']);
+            const wsTasks = getSheet(['tasks','task']);
+            const wsProjects = getSheet(['projects','project']);
+            if(wsSites||wsTasks||wsProjects){
+              logDiag('Using local consolidated workbook', {path:p, sheets: wb.SheetNames});
+              return {
+                rel:p,
+                sites: wsSites? XLSX.utils.sheet_to_json(wsSites,{defval:''}): [],
+                tasks: wsTasks? XLSX.utils.sheet_to_json(wsTasks,{defval:''}): [],
+                projects: wsProjects? XLSX.utils.sheet_to_json(wsProjects,{defval:''}): []
+              };
+            }
+          }catch(err){ note('dev consolidated read failed for '+p+': '+(err&&err.message?err.message:'err')); }
+        }
+      }catch{}
+    }
+
+    // Prod (SharePoint): try server-relative locations
+    const base = _spPageContextInfo.webServerRelativeUrl.replace(/\/$/,'');
+    const rels=[]; const cand=(n)=>[ `${base}/SiteAssets/ot/${n}`, `${base}/SiteAssets/${n}`, `${base}/Shared Documents/ot/${n}`, `${base}/Shared Documents/${n}`, `${base}/Documents/ot/${n}`, `${base}/Documents/${n}` ];
+    nameArr.forEach(n=> rels.push(...cand(n)));
+    for(const rel of rels){
+      try{
+        const buf = await fetchBinary(rel);
+        if(!buf) continue;
+        const wb = XLSX.read(buf,{type:'array', cellDates:true, cellNF:false, cellText:false});
+        const getSheet=(names)=>{
+          const lower = wb.SheetNames.map(s=>({name:s, low:s.trim().toLowerCase()}));
+          for(const want of names){ const idx = lower.findIndex(x=> x.low===want); if(idx!==-1) return wb.Sheets[wb.SheetNames[idx]]; }
+          return null;
+        };
+        const wsSites = getSheet(['sites','site','sites_inventory','sites inventory']);
+        const wsTasks = getSheet(['tasks','task']);
+        const wsProjects = getSheet(['projects','project']);
+        if(wsSites||wsTasks||wsProjects){
+          return {
+            rel,
+            sites: wsSites? XLSX.utils.sheet_to_json(wsSites,{defval:''}): [],
+            tasks: wsTasks? XLSX.utils.sheet_to_json(wsTasks,{defval:''}): [],
+            projects: wsProjects? XLSX.utils.sheet_to_json(wsProjects,{defval:''}): []
+          };
+        }
+      }catch(e){ note('consolidated read failed: '+(e&&e.message?e.message:'err')); }
+    }
+    return null;
+  }
+
+  // ===== App logic (Excel only) =====
+  next("Loading projects…"); logDiag('Projects phase start');
+  const uniq=a=>[...new Set(a.filter(v=>v!==null&&v!==undefined&&v!==""))];
+
+  // getBU — single definition
+  const getBU = (r)=>{
+    const bu = String(r.BusinessUnit||r.BU||'').trim().toUpperCase();
+    if(bu==='BEA'||bu==='BNA'||bu==='BSA') return bu;
+    const regRaw = String(r.Region||'').trim();
+    const regU = regRaw.toUpperCase();
+    const reg = regRaw.toLowerCase();
+    if(regU==='BEA'||regU==='BNA'||regU==='BSA') return regU;
+    if(reg.includes('europe')||reg.includes('asia')||reg.includes('emea')||reg.includes('apac')) return 'BEA';
+    if(reg.includes('north')) return 'BNA';
+    if(reg.includes('south')) return 'BSA';
+    if(reg.includes('latam')||reg.includes('latin')) return 'BSA';
+    if(reg==='na'||reg==='n.a.'||reg==='north america') return 'BNA';
+    if(reg==='sa'||reg==='s.a.'||reg==='south america') return 'BSA';
+    return 'Other';
+  };
+
+  function toBool(v){
+    if(v===true || v===1) return true;
+    if(v===false || v===0 || v===null || v===undefined) return false;
+    if(typeof v==='number') return v!==0;
+    if(typeof v==='string'){
+      const s=v.trim().toLowerCase();
+      if(s==='') return false;
+      if(s==='1'||s==='y'||s==='yes'||s==='true'||s==='t'||s==='x'||s==='on'||s==='enabled') return true;
+      if(s==='0'||s==='n'||s==='no'||s==='false'||s==='f'||s==='off'||s==='disabled') return false;
+      const n = Number(s); if(!isNaN(n)) return n!==0;
+      return false;
+    }
+    return false;
+  }
+
+  // Parse coords: supports "12.34", "12,34", "12°34'56\"N", and swaps if needed
+  function parseDMS(s){
+    const str = String(s||'').trim().toUpperCase().replace(',', '.');
+    const m = str.match(/(-?\d+(?:\.\d+)?)|(\d+)[°\s]+(\d+)[′']?[\s]*(\d+(?:\.\d+)?)[″"]?[\s]*([NSEW])?/g);
+    if(!m) return NaN;
+    // If simple number
+    if(/^-?\d+(\.\d+)?$/.test(str)) return parseFloat(str);
+    // DMS with optional hemisphere
+    const d = /(\d+)[°\s]+(\d+)[′']?[\s]*(\d+(?:\.\d+)?)[″"]?[\s]*([NSEW])?/.exec(str);
+    if(!d) return NaN;
+    let deg=+d[1], min=+d[2], sec=parseFloat(d[3]||0), hemi=d[4]||'';
+    let val = deg + (min/60) + (sec/3600);
+    if(hemi==='S' || hemi==='W') val = -val;
+    return val;
+  }
+  function parseCoord(v){
+    if(v==null) return NaN;
+    if(typeof v==='number') return v;
+    const s=String(v).trim();
+    if(!s) return NaN;
+    // “lat,lon” in one cell
+    if(s.includes(';')||s.includes(',')){
+      const sep = s.includes(';')?';':',';
+      const parts = s.split(sep).map(x=>x.trim());
+      if(parts.length===2){
+        const a=parseCoord(parts[0]), b=parseCoord(parts[1]);
+        if(!isNaN(a) && isNaN(b)) return a;
+        if(!isNaN(b) && isNaN(a)) return b;
+      }
+    }
+    // Try DMS then float
+    const d = parseDMS(s);
+    if(!isNaN(d)) return d;
+    const f = parseFloat(s.replace(',', '.'));
+    return isNaN(f)? NaN : f;
+  }
+  function fixLatLon(lat, lon){
+    let la=parseCoord(lat), lo=parseCoord(lon);
+    // Swap if obviously flipped
+    if((Math.abs(la)>90 && Math.abs(lo)<=90) || (Math.abs(lo)<-180 || Math.abs(lo)>180)){ const t=la; la=lo; lo=t; }
+    // Clamp invalids
+    if(Math.abs(la)>90) la = NaN;
+    if(Math.abs(lo)>180) lo = NaN;
+    return {lat:la, lon:lo};
+  }
+
+  function normalizeTaskRow(row){
+    const statuses=["planned","in progress","completed","blocked"];
+    if(!row.Status && typeof row.PlannedDate==='string' && statuses.includes(row.PlannedDate.trim().toLowerCase())){ row.Status = row.PlannedDate; row.PlannedDate = ''; }
+    if(typeof row.Owner==='string' && /^\s*\d{4}\s*$/.test(row.Owner)){ row.Year = Number(row.Owner.trim()); row.Owner=''; }
+    const tid=(row.TaskId||'').toString();
+    if(!tid || /\s/.test(tid)){ const base=(row.TaskType||row.Project||'TASK'); row.TaskId = (base.substring(0,3).toUpperCase()||'TSK') + '-' + Math.random().toString(36).slice(2,6).toUpperCase(); }
+    return row;
+  }
+
+  // ===== SharePoint Integration Functions =====
+  async function initializeMSAL() {
+    if (msalInstance) return msalInstance;
+    
+    const msalConfig = {
+      auth: {
+        clientId: "00000003-0000-0000-c000-000000000000", // Microsoft Graph
+        authority: "https://login.microsoftonline.com/common",
+        redirectUri: window.location.origin
+      },
+      cache: {
+        cacheLocation: "sessionStorage",
+        storeAuthStateInCookie: false
+      }
+    };
+    
+    msalInstance = new msal.PublicClientApplication(msalConfig);
+    return msalInstance;
+  }
+
+  async function authenticateWithSharePoint() {
+    try {
+      await initializeMSAL();
+      const loginRequest = {
+        scopes: ["https://graph.microsoft.com/.default"],
+        prompt: "select_account"
+      };
+      
+      const response = await msalInstance.loginPopup(loginRequest);
+      accessToken = response.accessToken;
+      logDiag('SharePoint authentication successful');
+      return true;
+    } catch (error) {
+      logDiag('SharePoint authentication failed:', error);
+      throw error;
+    }
+  }
+
+  async function getSharePointSiteId(siteUrl) {
+    try {
+      const response = await fetch(`https://graph.microsoft.com/v1.0/sites/${encodeURIComponent(siteUrl)}`, {
+        headers: {
+          'Authorization': `Bearer ${accessToken}`,
+          'Content-Type': 'application/json'
+        }
+      });
+      
+      if (!response.ok) {
+        throw new Error(`Failed to get site ID: ${response.status}`);
+      }
+      
+      const data = await response.json();
+      return data.id;
+    } catch (error) {
+      logDiag('Error getting SharePoint site ID:', error);
+      throw error;
+    }
+  }
+
+  async function getSharePointListItems(listName) {
+    try {
+      const response = await fetch(`https://graph.microsoft.com/v1.0/sites/${siteId}/lists/${listName}/items?expand=fields`, {
+        headers: {
+          'Authorization': `Bearer ${accessToken}`,
+          'Content-Type': 'application/json'
+        }
+      });
+      
+      if (!response.ok) {
+        throw new Error(`Failed to get list items: ${response.status}`);
+      }
+      
+      const data = await response.json();
+      return data.value.map(item => ({
+        id: item.id,
+        ...item.fields
+      }));
+    } catch (error) {
+      logDiag(`Error getting ${listName} items:`, error);
+      throw error;
+    }
+  }
+
+  async function loadDataFromSharePoint() {
+    try {
+      const corporateUrl = document.getElementById('corporateUrl').value;
+      const projectsList = document.getElementById('projectsList').value;
+      const tasksList = document.getElementById('tasksList').value;
+      const sitesList = document.getElementById('sitesList').value;
+      
+      if (!corporateUrl || !projectsList) {
+        throw new Error('Please configure corporate URL and list names');
+      }
+      
+      next("Loading SharePoint data…");
+      logDiag('Loading data from SharePoint', {corporateUrl, projectsList, tasksList, sitesList});
+      
+      // Get site ID
+      siteId = await getSharePointSiteId(corporateUrl);
+      logDiag('SharePoint site ID obtained:', siteId);
+      
+      // Load data from SharePoint
+      const [projects, tasks, sites] = await Promise.all([
+        getSharePointListItems(projectsList).catch(() => []),
+        getSharePointListItems(tasksList).catch(() => []),
+        getSharePointListItems(sitesList).catch(() => [])
+      ]);
+      
+      // Process data similar to Excel processing
+      PROJECTS = projects.map(b => ({
+        ...b,
+        BusinessUnit: b.BusinessUnit || b.BU || '',
+        Region: b.Region || b.region,
+        Country: b.Country || b.country,
+        Site: b.Site || b.site,
+        ProjectType: b.ProjectType || b.ProjectTyp || b.projectType,
+        Domain: b.Domain,
+        Category: b.Category,
+        Project: b.Project || b.Title,
+        BeforeState: b.BeforeState || b.BeforeStat,
+        AfterState: b.AfterState,
+        KeyBenefits: b.KeyBenefits || b.KeyBenefi,
+        Year: (isFinite(+b.Year) && String(b.Year).length <= 4) ? Number(b.Year) : (String(b.Year || '').match(/^\d{4}$/) ? Number(b.Year) : ''),
+        Status: b.Status,
+        Owner: b.Owner,
+        Latitude: b.Latitude || b.lat || b.Lat,
+        Longitude: b.Longitude || b.lon || b.Lon || b.Lng
+      }));
+      
+      TASKS = tasks.map(b => ({
+        ...b,
+        BusinessUnit: b.BusinessUnit || b.BU || '',
+        Region: b.Region, Country: b.Country, Site: b.Site,
+        TaskId: b.TaskId || b.TaskID || b.id, 
+        TaskName: b.TaskName || b.Task || b.Project || b.Title || '',
+        TaskType: b.TaskType || b.Type || '',
+        Status: b.Status || '',
+        PlannedDate: b.PlannedDate || b.Planned,
+        CompletedDate: b.CompletedDate || b.Completed
+      })).map(normalizeTaskRow);
+      
+      SITES = sites.map(b => ({
+        ...b,
+        BusinessUnit: b.BusinessUnit || b.BU || '',
+        Region: b.Region, Country: b.Country, Site: b.Site,
+        UsesNewOTNetworkIP: toBool(b.UsesNewOTNetworkIP || b.NewOTNetworkIP || b.OTSubnet),
+        MonitoredSolarWindsOT: toBool(b.MonitoredSolarWindsOT || b.SolarWinds),
+        MonitoredSinecNMSOT: toBool(b.MonitoredSinecNMSOT || b.SINEC),
+        InOTvSphere: toBool(b.InOTvSphere || b.OTvSphere),
+        LocalOTDomainController: toBool(b.LocalOTDomainController || b.LocalOTDC),
+        OTSubnetCIDR: b.OTSubnetCIDR || b.OTSubnet,
+        EffectiveDate: b.EffectiveDate || b.Effective,
+        Latitude: b.Latitude ?? b.lat ?? b.Lat,
+        Longitude: b.Longitude ?? b.lon ?? b.Lon ?? b.Lng
+      }));
+      
+      logDiag('SharePoint data loaded', {projects: PROJECTS.length, tasks: TASKS.length, sites: SITES.length});
+      return true;
+    } catch (error) {
+      logDiag('Failed to load SharePoint data:', error);
+      throw error;
+    }
+  }
+
+  if(!DATA_LOADED){
+  const consolidated = await fetchConsolidated(['OTdev.xlsx','OT.xlsx','OT_Data.xlsx']);
+  logDiag('Consolidated workbook', {found: !!consolidated, rel: consolidated && consolidated.rel});
+  try{
+    const xl = DATA_LOADED? [] : (consolidated? consolidated.projects : await fetchXlsxName('projects.xlsx', FILE_PATHS.projects));
+    if(!DATA_LOADED){ PROJECTS = (xl||[]).map(b=>({
+      ...b,
+      BusinessUnit:b.BusinessUnit||b.BU||'',
+      Region:b.Region||b.region,
+      Country:b.Country||b.country,
+      Site:b.Site||b.site,
+      ProjectType:b.ProjectType||b.ProjectTyp||b.projectType,
+      Domain:b.Domain,
+      Category:b.Category,
+      Project:b.Project||b.Title,
+      BeforeState:b.BeforeState||b.BeforeStat,
+      AfterState:b.AfterState,
+      KeyBenefits:b.KeyBenefits||b.KeyBenefi,
+      Year:(isFinite(+b.Year) && String(b.Year).length<=4) ? Number(b.Year) : (String(b.Year||'').match(/^\d{4}$/) ? Number(b.Year) : ''),
+      Status:b.Status,
+      Owner:b.Owner,
+      Latitude:b.Latitude||b.lat||b.Lat,
+      Longitude:b.Longitude||b.lon||b.Lon||b.Lng
+    })); }
+    next("Loading tasks…");
+  }catch(e){ logDiag('Projects load failed', (e&&e.message)||String(e)); showErr('Could not load projects.'); hideLoader(); return; }
+
+  try{
+    const xl = DATA_LOADED? [] : (consolidated? consolidated.tasks : await fetchXlsxName('tasks.xlsx', FILE_PATHS.tasks));
+    if(!DATA_LOADED){ TASKS = (xl||[]).map(b=>({
+      ...b,
+      BusinessUnit:b.BusinessUnit||b.BU||'',
+      Region:b.Region, Country:b.Country, Site:b.Site,
+      TaskId:b.TaskId||b.TaskID||b.id, TaskName:b.TaskName||b.Task||b.Project||b.Title||'',
+      TaskType:b.TaskType||b.Type||'',
+      Status:b.Status||'',
+      PlannedDate:b.PlannedDate||b.Planned,
+      CompletedDate:b.CompletedDate||b.Completed
+    })).map(normalizeTaskRow); }
+    next("Loading sites…");
+  }catch(e){ logDiag('Tasks load failed', (e&&e.message)||String(e)); showErr('Could not load tasks.'); hideLoader(); return; }
+
+  try{
+    const xl = DATA_LOADED? [] : (consolidated? consolidated.sites : await fetchXlsxName('sites_inventory.xlsx', FILE_PATHS.sites));
+    if(!DATA_LOADED){ SITES = (xl||[]).map(b=>({
+      ...b,
+      BusinessUnit:b.BusinessUnit||b.BU||'',
+      Region:b.Region, Country:b.Country, Site:b.Site,
+      UsesNewOTNetworkIP: toBool(b.UsesNewOTNetworkIP||b.NewOTNetworkIP||b.OTSubnet),
+      MonitoredSolarWindsOT: toBool(b.MonitoredSolarWindsOT||b.SolarWinds),
+      MonitoredSinecNMSOT: toBool(b.MonitoredSinecNMSOT||b.SINEC),
+      InOTvSphere: toBool(b.InOTvSphere||b.OTvSphere),
+      LocalOTDomainController: toBool(b.LocalOTDomainController||b.LocalOTDC),
+      OTSubnetCIDR: b.OTSubnetCIDR || b.OTSubnet,
+      EffectiveDate: b.EffectiveDate || b.Effective,
+      Latitude: b.Latitude ?? b.lat ?? b.Lat,
+      Longitude: b.Longitude ?? b.lon ?? b.Lon ?? b.Lng
+    })); }
+    next("Rendering…");
+  }catch(e){ logDiag('Sites load failed', (e&&e.message)||String(e)); showErr('Could not load sites.'); hideLoader(); return; }
+  }
+
+  // Column audit (after normalization)
+  try{
+    function audit(label, rows, critical, recommended){
+      const present = new Set(Object.keys((rows&&rows[0])||{}));
+      const missCrit = (critical||[]).filter(k=> !present.has(k));
+      const missRec = (recommended||[]).filter(k=> !present.has(k));
+      logDiag('Column audit '+label, {present: Array.from(present).sort(), missing_critical: missCrit, missing_recommended: missRec});
+    }
+    audit('SITES', SITES,
+      ['Site','Region','BusinessUnit','Country'],
+      ['Latitude','Longitude','UsesNewOTNetworkIP','MonitoredSolarWindsOT','MonitoredSinecNMSOT','InOTvSphere','LocalOTDomainController','OTSubnetCIDR','EffectiveDate']
+    );
+    audit('TASKS', TASKS,
+      ['Site','TaskId','TaskName'],
+      ['TaskType','Status','PlannedDate','CompletedDate','Owner']
+    );
+    audit('PROJECTS', PROJECTS,
+      ['Site','ProjectType','Project','Status'],
+      ['Year','BeforeState','AfterState','KeyBenefits','Owner','Latitude','Longitude']
+    );
+  }catch{}
+
+  // Canonical site codes
+  const siteCodes = uniq(SITES.map(s=> s && s.Site ? String(s.Site).trim().toUpperCase() : '')).filter(v=> /^[A-Z]{3}$/.test(v));
+  const inferSiteCode = (name)=>{
+    const s = String(name||'').trim().toUpperCase();
+    if(/^[A-Z]{3}$/.test(s)) return s;
+    if(!s) return '';
+    let best=null, bestScore=-1;
+    for(const code of siteCodes){
+      let idx=-1, ok=true, score=0;
+      for(const ch of code){
+        const pos = s.indexOf(ch, idx+1);
+        if(pos===-1){ ok=false; break; }
+        score += (100 - pos);
+        idx = pos;
+      }
+      if(ok && score>bestScore){ bestScore=score; best=code; }
+    }
+    return best || (s.match(/[A-Z]{3}/)?.[0] || '');
+  };
+  TASKS.forEach(t=>{ const c=inferSiteCode(t.Site); if(c) t.Site=c; });
+  PROJECTS.forEach(p=>{ const c=inferSiteCode(p.Site); if(c) p.Site=c; });
+
+  // UI + KPIs
+  const types=uniq(PROJECTS.map(p=>p.ProjectType)).sort();
+  // BU list derived from SITES to ensure coverage even if projects are missing in a BU
+  const bus=uniq(SITES.map(getBU)).filter(v=>v && v!=='Other');
+  const years=uniq(PROJECTS.map(p=>p.Year)).sort((a,b)=>String(a).localeCompare(String(b)));
+  const statuses=uniq(PROJECTS.map(p=>p.Status||'')).sort();
+  const fill=(el,arr,lbl)=>el.innerHTML=`<option value="">All ${lbl||""}</option>`+arr.map(v=>`<option>${v}</option>`).join("");
+  fill(document.getElementById('fBU'), (bus.length?bus:['BEA','BNA','BSA']).sort(), 'Region');
+  fill(document.getElementById("fType"),types,"Types");
+  fill(document.getElementById("fYear"),years,"Years");
+  fill(document.getElementById("fStatus"),statuses,"Statuses");
+
+  const countTrue=col=>SITES.filter(s=> s && toBool(s[col])===true).length;
+  // Inventory KPIs
+  const invDefs=[
+    {name:"New OT Network IP",col:"UsesNewOTNetworkIP"},
+    {name:"Monitored (SolarWinds OT)",col:"MonitoredSolarWindsOT"},
+    {name:"Monitored (SINEC OT)",col:"MonitoredSinecNMSOT"},
+    {name:"In OT vSphere",col:"InOTvSphere"},
+    {name:"Local OT Domain Controller",col:"LocalOTDomainController"}
+  ];
+  const invHtml=invDefs.map(k=>`<div class="card"><div class="label">${k.name}</div><div class="value">${countTrue(k.col)}</div></div>`).join("");
+  logDiag('Inventory KPI counts', Object.fromEntries(invDefs.map(k=>[k.col, countTrue(k.col)])));
+  const buSel = document.getElementById('fBU').value;
+  if(!buSel){
+    const buCards = ['BEA','BNA','BSA'].map(b=>{
+      const nSites = SITES.filter(s=> getBU(s)===b).length || 0;
+      return `<div class="card bu ${b}"><div class="label">${b}</div><div class="value">${nSites}</div></div>`;
+    }).join('');
+    document.getElementById("kpiInventory").innerHTML = invHtml + `<div class="kpi bu-strip">${buCards}</div>`;
+  } else {
+    document.getElementById("kpiInventory").innerHTML = invHtml;
+  }
+
+  function render(){
+    const bu=document.getElementById('fBU').value, t=document.getElementById("fType").value, y=document.getElementById("fYear").value, s=document.getElementById("fStatus").value;
+    let rows=PROJECTS.slice();
+    if(bu){
+      // Filter projects by sites that belong to the selected BU (canonical from SITES)
+      const buSites = new Set(SITES.filter(s=> getBU(s)===bu).map(s=> normSite(s.Site)));
+      rows = rows.filter(r=> buSites.has(normSite(r.Site)));
+    }
+    if(t) rows=rows.filter(r=>r.ProjectType===t);
+    if(y) rows=rows.filter(r=>String(r.Year)===y);
+    if(s) rows=rows.filter(r=>r.Status===s);
+
+    const done=rows.filter(r=>(r.Status||"").toLowerCase()==="completed").length;
+    const prog=rows.filter(r=>(r.Status||"").toLowerCase()==="in progress").length;
+    document.getElementById("kpiProjects").innerHTML=`
+      <div class="card"><div class="label">Total Projects</div><div class="value">${rows.length}</div></div>
+      <div class="card"><div class="label">Completed</div><div class="value">${done}</div></div>
+      <div class="card"><div class="label">In Progress</div><div class="value">${prog}</div></div>
+      <div class="card"><div class="label">Sites</div><div class="value">${new Set(rows.map(r=>r.Site)).size}</div></div>`;
+
+    document.getElementById("cards").innerHTML=rows.map(r=>{
+      const pill=r.Status==="Completed"?"done":(r.Status==="In Progress"?"prog":"other");
+      const bu = getBU(r);
+      const preferred=["BusinessUnit","Region","Country","Site","ProjectType","Domain","Category","Project","BeforeState","AfterState","KeyBenefits","Year","Status","Owner"];
+      const extras=Object.keys(r).filter(k=>!preferred.includes(k) && r[k]!==undefined && r[k]!=='' && k!=="__proto__");
+      const extrasHtml=extras.length?`<div class="meta">`+extras.map(k=>`<span style="margin-right:10px"><b>${k}:</b> ${r[k]}</span>`).join("")+`</div>`:"";
+      return `<div class="row">
+        <div class="top"><span><b>[${r.ProjectType||""}] ${r.Project||r.Title||""}</b> — ${r.Site||""} <span class="bu bu-${bu}">${bu}</span></span>
+          <span class="pill ${pill}">${r.Status||""}</span></div>
+        <div class="meta">${r.Region||""} • ${r.Country||""} • ${r.Year||""}</div>
+        <div class="grid">
+          <div class="box before"><b>Before</b><div>${(r.BeforeState||"").replace(/\n/g,"<br>")}</div></div>
+          <div class="box after"><b>After</b><div>${(r.AfterState||"").replace(/\n/g,"<br>")}</div></div>
+        </div>
+        ${r.KeyBenefits?`<div style="margin-top:6px">Benefits: ${r.KeyBenefits}</div>`:""}
+        ${extrasHtml}
+      </div>`;
+    }).join("");
+
+    // CSV export disabled for launch (can be re-enabled later)
+    document.getElementById("btnExport").style.display='none';
+  }
+
+  function normSite(v){ const s=String(v||'').trim().toUpperCase(); const m=s.match(/[A-Z]{3}/); return m? m[0] : s; }
+  function renderTasks(){
+    const sel=normSite(document.getElementById("sitePick").value);
+    let rows = sel? TASKS.filter(t=> normSite(t.Site)===sel) : [];
+    try{
+      const demoOn = document.getElementById('plannerDemo') && document.getElementById('plannerDemo').checked;
+      const spoOn = (document.getElementById('plannerSPO') && document.getElementById('plannerSPO').checked) || PLANNER_SPO_ENABLED;
+      if(demoOn && sel){
+        // Mock Planner tasks for demo purposes
+        const mock=[
+          {TaskId:'PLN-'+sel+'-01', TaskName:'Planner: Site kickoff', TaskType:'Planner', Status:'In Progress', PlannedDate:'', CompletedDate:''},
+          {TaskId:'PLN-'+sel+'-02', TaskName:'Planner: Rack audit', TaskType:'Planner', Status:'Planned', PlannedDate:'', CompletedDate:''}
+        ];
+        rows = rows.concat(mock.map(m=> ({...m, Site: sel, __Source:'Planner'})));
+      }
+      // Real Planner rows (if loaded via ?planner=1)
+      if(window.OTPlannerTasksLoaded && Array.isArray(window.OTPlannerTasks)){
+        rows = rows.concat(window.OTPlannerTasks.map(m=> ({...m, Site: sel, __Source:'Planner'})));
+      }
+      // SharePoint list synced Planner rows
+      if(spoOn && window.OTPlannerSPO && Array.isArray(window.OTPlannerSPO)){
+        const add = window.OTPlannerSPO.filter(t=> !sel || normSite(t.SiteCode||t.Site||'')===sel)
+          .map(t=>({
+            TaskId: t.PlannerTaskId||t.Id||t.TaskId||'',
+            TaskName: t.Title||t.TaskName||'',
+            TaskType: t.Bucket||t.TaskType||'Planner',
+            Status: t.Status||'',
+            PlannedDate: t.StartDate||t.Planned||'',
+            CompletedDate: t.CompletedDate||t.Completed||'',
+            __Source: 'Planner'
+          }));
+        rows = rows.concat(add);
+      }
+    }catch{}
+    // Normalize status case and common variants
+    const normStatus=s=>{ const v=String(s||'').trim().toLowerCase();
+      if(!v) return '';
+      if(v.includes('progress')) return 'In Progress';
+      if(v.startsWith('plan')) return 'Planned';
+      if(v.startsWith('comp')) return 'Completed';
+      if(v.startsWith('block')||v==='hold'||v==='on hold') return 'Blocked';
+      return s||'';
+    };
+    const deriveStatus=(r)=>{
+      const base = normStatus(r.Status);
+      if(base) return base;
+      // Heuristic: if CompletedDate present → Completed; else if PlannedDate present and date in future/past → Planned/In Progress
+      const c = r.CompletedDate || r.Completed; const p = r.PlannedDate || r.Planned;
+      if(c && String(c).trim()!=='') return 'Completed';
+      if(p && String(p).trim()!=='') return 'Planned';
+      return '';
+    };
+    const rowsN = rows.map(r=>({ ...r, Status: deriveStatus(r)}));
+    const buckets = { 'Planned':0, 'In Progress':0, 'Completed':0, 'Blocked':0 };
+    rowsN.forEach(r=>{ if(buckets.hasOwnProperty(r.Status)) buckets[r.Status]++; });
+    const counts=["Planned","In Progress","Completed","Blocked"].map(st=>({st,n:buckets[st]}));
+    document.getElementById("taskStatus").innerHTML=counts.map(c=>`<div class="card"><div class="label">${c.st}</div><div class="value">${c.n}</div></div>`).join("");
+    if(!rowsN.length){ document.getElementById("tasks").innerHTML=""; return; }
+    const baseCols=[
+      {key:"TaskId", label:"TaskId", get:(r)=> r.TaskId||r.TaskID||r.id||""},
+      {key:"TaskName", label:"TaskName", get:(r)=> r.TaskName||r.Task||r.Project||r.Title||""},
+      {key:"TaskType", label:"TaskType", get:(r)=> r.TaskType||r.Type||r.Category||r.Domain||""},
+      {key:"Status", label:"Status", get:(r)=> { const s=normStatus(r.Status)||""; const c = s==="Completed"?"completed":(s==="In Progress"?"inprogress":(s==="Blocked"?"blocked":"planned")); return `<span><span class=\"status-dot ${c}\"></span>${s}</span>`; }},
+      {key:"PlannedDate", label:"PlannedDate", get:(r)=> formatDate(r.PlannedDate||r.Planned)},
+      {key:"CompletedDate", label:"CompletedDate", get:(r)=> formatDate(r.CompletedDate||r.Completed)},
+      {key:"__Source", label:"Source", get:(r)=> r.__Source||'Excel'}
+    ];
+    const skipKeys = new Set(["BusinessUnit","Region","Country","Site","Project"]);
+    const extraKeys = Array.from(new Set(rowsN.flatMap(r=>Object.keys(r)))).filter(k=> !skipKeys.has(k) && !baseCols.some(c=>c.key===k || c.label===k));
+    const allCols = baseCols.concat(extraKeys.map(k=>({key:k,label:k,get:(r)=> r[k]??""})));
+    const th = `<tr>${allCols.map(c=>`<th>${c.label}</th>`).join("")}</tr>`;
+    const tr = rowsN.map(r=>`<tr>${allCols.map(c=>{
+      const v=c.get(r);
+      const isHtml = typeof v==='string' && v.indexOf('<span class=')===0;
+      const val=isHtml? v : ((v && typeof v==='string')?v: (v?String(v):''));
+      return isHtml? `<td>${val}</td>` : `<td>${val}</td>`;
+    }).join("")}</tr>`).join("");
+    document.getElementById("tasks").innerHTML=`<table><thead>${th}</thead><tbody>${tr}</tbody></table>`;
+  }
+
+  function formatDate(v){
+    if(!v) return '';
+    try{
+      if(typeof v==='number'){
+        if(v>=1900 && v<=2200) return String(v);
+        if(v>25569 && v<60000){ const ms = (v - 25569) * 86400000; const d=new Date(ms); return d.toISOString().substring(0,10); }
+        return String(v);
+      }
+      if(v instanceof Date) return v.toISOString().substring(0,10);
+      const s=String(v).trim();
+      if(/^\d{4}$/.test(s)) return s;
+      const d=new Date(s); if(!isNaN(d.getTime())) return d.toISOString().substring(0,10);
+      return s;
+    }catch{ return String(v); }
+  }
+
+  // Hook UI
+  ["fType","fYear","fStatus","fBU"].forEach(id=>document.getElementById(id).addEventListener("change",()=>{ render(); }));
+  const siteOptions = siteCodes.slice().sort();
+  document.getElementById("sitePick").innerHTML=`<option value="">Select a site</option>`+siteOptions.map(s=>`<option>${s}</option>`).join("");
+  document.getElementById("sitePick").addEventListener("change",renderTasks);
+
+  // SharePoint UI event listeners
+  document.getElementById('dataSourceExcel').addEventListener('change', function() {
+    if (this.checked) {
+      document.getElementById('sharePointConfig').style.display = 'none';
+      document.getElementById('btnAuth').style.display = 'none';
+      document.getElementById('btnLoadSharePoint').style.display = 'none';
+    }
+  });
+
+  document.getElementById('dataSourceSharePoint').addEventListener('change', function() {
+    if (this.checked) {
+      document.getElementById('sharePointConfig').style.display = 'block';
+      document.getElementById('btnAuth').style.display = 'inline-block';
+      document.getElementById('btnLoadSharePoint').style.display = 'none';
+    }
+  });
+
+  document.getElementById('btnAuth').addEventListener('click', async function() {
+    try {
+      this.disabled = true;
+      this.textContent = 'Signing in...';
+      
+      await authenticateWithSharePoint();
+      
+      this.textContent = 'Signed In';
+      this.style.display = 'none';
+      document.getElementById('btnLoadSharePoint').style.display = 'inline-block';
+      
+      // Show success message
+      const statusDiv = document.createElement('div');
+      statusDiv.className = 'status success';
+      statusDiv.textContent = 'Successfully signed in to SharePoint!';
+      document.getElementById('sharePointConfig').appendChild(statusDiv);
+      setTimeout(() => statusDiv.remove(), 3000);
+      
+    } catch (error) {
+      this.disabled = false;
+      this.textContent = 'Sign In to SharePoint';
+      
+      // Show error message
+      const statusDiv = document.createElement('div');
+      statusDiv.className = 'status error';
+      statusDiv.textContent = 'Authentication failed: ' + error.message;
+      document.getElementById('sharePointConfig').appendChild(statusDiv);
+      setTimeout(() => statusDiv.remove(), 5000);
+    }
+  });
+
+  document.getElementById('btnLoadSharePoint').addEventListener('click', async function() {
+    try {
+      this.disabled = true;
+      this.textContent = 'Loading...';
+      
+      await loadDataFromSharePoint();
+      
+      // Continue with existing rendering logic
+      next("Rendering…");
+      
+      // Update UI elements
+      const types=uniq(PROJECTS.map(p=>p.ProjectType)).sort();
+      const bus=uniq(SITES.map(getBU)).filter(v=>v && v!=='Other');
+      const years=uniq(PROJECTS.map(p=>p.Year)).sort((a,b)=>String(a).localeCompare(String(b)));
+      const statuses=uniq(PROJECTS.map(p=>p.Status||'')).sort();
+      const fill=(el,arr,lbl)=>el.innerHTML=`<option value="">All ${lbl||""}</option>`+arr.map(v=>`<option>${v}</option>`).join("");
+      fill(document.getElementById('fBU'), (bus.length?bus:['BEA','BNA','BSA']).sort(), 'Region');
+      fill(document.getElementById("fType"),types,"Types");
+      fill(document.getElementById("fYear"),years,"Years");
+      fill(document.getElementById("fStatus"),statuses,"Statuses");
+
+      // Update inventory KPIs
+      const countTrue=col=>SITES.filter(s=> s && toBool(s[col])===true).length;
+      const invDefs=[
+        {name:"New OT Network IP",col:"UsesNewOTNetworkIP"},
+        {name:"Monitored (SolarWinds OT)",col:"MonitoredSolarWindsOT"},
+        {name:"Monitored (SINEC OT)",col:"MonitoredSinecNMSOT"},
+        {name:"In OT vSphere",col:"InOTvSphere"},
+        {name:"Local OT Domain Controller",col:"LocalOTDomainController"}
+      ];
+      const invHtml=invDefs.map(k=>`<div class="card"><div class="label">${k.name}</div><div class="value">${countTrue(k.col)}</div></div>`).join("");
+      const buSel = document.getElementById('fBU').value;
+      if(!buSel){
+        const buCards = ['BEA','BNA','BSA'].map(b=>{
+          const nSites = SITES.filter(s=> getBU(s)===b).length || 0;
+          return `<div class="card bu ${b}"><div class="label">${b}</div><div class="value">${nSites}</div></div>`;
+        }).join('');
+        document.getElementById("kpiInventory").innerHTML = invHtml + `<div class="kpi bu-strip">${buCards}</div>`;
+      } else {
+        document.getElementById("kpiInventory").innerHTML = invHtml;
+      }
+
+      // Update site picker
+      const siteOptions = siteCodes.slice().sort();
+      document.getElementById("sitePick").innerHTML=`<option value="">Select a site</option>`+siteOptions.map(s=>`<option>${s}</option>`).join("");
+
+      // Render the dashboard
+      render(); 
+      renderTasks();
+      
+      // Update status
+      statusEl.textContent = `Loaded Projects: ${PROJECTS.length} • Tasks: ${TASKS.length} • Sites: ${SITES.length} (from SharePoint)`;
+      logDiag('SharePoint data loaded and rendered', {projects:PROJECTS.length, tasks:TASKS.length, sites:SITES.length});
+      hideLoader();
+      
+      this.textContent = 'Reload from SharePoint';
+      this.disabled = false;
+      
+    } catch (error) {
+      this.disabled = false;
+      this.textContent = 'Load from SharePoint';
+      
+      showErr('Failed to load data from SharePoint: ' + error.message);
+      logDiag('SharePoint load error:', error);
+    }
+  });
+  // Map toggle (hidden by default)
+  try{
+    const tgl=document.getElementById('toggleMap');
+    const mapEl=document.getElementById('map');
+    const noteEl=document.getElementById('mapNote');
+    if(tgl&&mapEl&&noteEl){
+      tgl.checked=false;
+      tgl.addEventListener('change',()=>{
+        const on=tgl.checked;
+        mapEl.style.display=on?'':'none';
+        noteEl.style.display=on?'':'none';
+        try{ if(on && window.L && mapRendered){ setTimeout(()=>{ try{ const mEl=document.getElementById('map'); mEl && mEl._leaflet_id && window.L && window.L.Map && window.L.map; }catch{} }, 50); } }catch{}
+        try{ if(on && window.L && !mapRendered){ /* trigger size calc */ setTimeout(()=>{ try{ window.dispatchEvent(new Event('resize')); }catch{} }, 100); } }catch{}
+      });
+    }
+  }catch{}
+  const chk=document.getElementById('plannerDemo'); if(chk){ chk.addEventListener('change', renderTasks); }
+  const chkSpo=document.getElementById('plannerSPO'); if(chkSpo){ chkSpo.addEventListener('change', async ()=>{ try{ if(chkSpo.checked && (!window.OTPlannerSPO || !Array.isArray(window.OTPlannerSPO))){ window.OTPlannerSPO = await fetchPlannerFromSPO(); } }catch{} renderTasks(); }); }
+
+  render(); renderTasks();
+
+  // Compact final status (friendly line)
+  statusEl.textContent = `Loaded Projects: ${PROJECTS.length} • Tasks: ${TASKS.length} • Sites: ${SITES.length}`;
+  logDiag('Data loaded counts', {projects:PROJECTS.length, tasks:TASKS.length, sites:SITES.length});
+  hideLoader();
+
+  // ===== Optional: Microsoft Planner (Graph) read-only integration (flagged by ?planner=1) =====
+  async function ensureMsal(){
+    try{ if(window.msal && window.msal.PublicClientApplication) return true; }catch{}
+    try{
+      await loadScript('https://alcdn.msauth.net/browser/2.38.0/js/msal-browser.min.js');
+      return !!(window.msal && window.msal.PublicClientApplication);
+    }catch(e){ logDiag('MSAL load failed', e && (e.message||String(e))); return false; }
+  }
+  async function getGraphToken(clientId, tenantId, scopes){
+    try{
+      const ok = await ensureMsal(); if(!ok) throw new Error('MSAL not available');
+      const authority = 'https://login.microsoftonline.com/' + (tenantId||'common');
+      const pca = new window.msal.PublicClientApplication({ auth:{ clientId, authority }, cache:{ cacheLocation:'sessionStorage' } });
+      try{ await pca.initialize(); }catch{}
+      let account = (pca.getAllAccounts()||[])[0];
+      if(!account){ const lr = await pca.loginPopup({ scopes: scopes||['User.Read'] }); account = lr.account; }
+      try{
+        const res = await pca.acquireTokenSilent({ account, scopes: scopes||['Tasks.Read','Group.Read.All','offline_access'] });
+        return res.accessToken;
+      }catch{
+        const res = await pca.acquireTokenPopup({ scopes: scopes||['Tasks.Read','Group.Read.All','offline_access'] });
+        return res.accessToken;
+      }
+    }catch(e){ logDiag('Graph token error', e && (e.message||String(e))); return null; }
+  }
+  async function graphGet(url, token){
+    try{ const r = await fetch(url, { headers:{ Authorization:'Bearer '+token } }); if(!r.ok) throw new Error('HTTP '+r.status); return await r.json(); }catch(e){ logDiag('Graph GET failed', {url, err:e && (e.message||String(e))}); return null; }
+  }
+  function derivePlannerStatus(t){ try{ if(t && (t.percentComplete===100 || t.completedDateTime)) return 'Completed'; return (t.startDateTime||t.dueDateTime)? 'In Progress' : 'Planned'; }catch{ return '' } }
+  async function loadPlannerTasks(planId, token){
+    const data = await graphGet('https://graph.microsoft.com/v1.0/planner/plans/'+encodeURIComponent(planId)+'/tasks', token);
+    const items = (data && data.value)||[];
+    const rows = items.map(t=>({
+      TaskId: t.id,
+      TaskName: t.title||'',
+      TaskType: 'Planner',
+      Status: derivePlannerStatus(t),
+      PlannedDate: t.startDateTime||'',
+      CompletedDate: t.completedDateTime||'',
+      __Source: 'Planner'
+    }));
+    return rows;
+  }
+  async function initPlannerFromParams(){
+    try{
+      const clientId = urlParams.get('msalClientId');
+      const tenantId = urlParams.get('msalTenantId') || (window._spPageContextInfo && _spPageContextInfo.tenantId) || '';
+      const planId = urlParams.get('plannerPlanId') || (document.getElementById('plannerPlanId') && document.getElementById('plannerPlanId').value) || '';
+      if(!clientId || !planId){ logDiag('Planner skipped (missing clientId or planId)'); return; }
+      const token = await getGraphToken(clientId, tenantId, ['Tasks.Read','Group.Read.All','offline_access']);
+      if(!token){ logDiag('Planner token not acquired'); return; }
+      const rows = await loadPlannerTasks(planId, token);
+      window.OTPlannerTasks = rows; window.OTPlannerTasksLoaded = true;
+      logDiag('Planner tasks loaded', {count: rows.length});
+    }catch(e){ logDiag('Planner init error', e && (e.message||String(e))); }
+  }
+  if(PLANNER_ENABLED){ try{ await initPlannerFromParams(); renderTasks(); }catch{} }
+
+  // ===== SharePoint list sync: fetch Planner tasks mirrored into SPO list =====
+  async function fetchPlannerFromSPO(){
+    try{
+      const base = _spPageContextInfo.webAbsoluteUrl.replace(/\/$/,'');
+      const webRel = _spPageContextInfo.webServerRelativeUrl.replace(/\/$/,'');
+      const title = SPO_PLANNER_LIST;
+
+      async function tryJson(u){
+        try{ const r=await fetch(u,{credentials:'same-origin', headers:{Accept:'application/json;odata=nometadata'}}); logDiag('SPO resolve try', {url:u, status:r.status}); if(!r.ok) return null; return await r.json(); }catch{return null}
+      }
+
+      // Resolve list ID robustly: prefer hard-coded GUID, else by Title or server-relative path
+      let listId=(SPO_PLANNER_LIST_ID && /[0-9a-fA-F-]{36}/.test(SPO_PLANNER_LIST_ID))? SPO_PLANNER_LIST_ID : null;
+      const listPath = `${webRel}/Lists/${title}`;
+      const candidates=listId? [] : [
+        `${base}/_api/web/lists/getByTitle('${encodeURIComponent(title)}')?$select=Id,Title`,
+        `${base}/_api/web/GetList(@list)?@list='${encodeURIComponent(listPath)}'&$select=Id,Title`,
+        `${base}/_api/web/lists?$select=Id,Title&$filter=Title eq '${String(title).replace(/'/g,"''")}'`
+      ];
+      for(const u of candidates){
+        const j = await tryJson(u);
+        const id = j && (j.Id || (j.value && j.value[0] && j.value[0].Id));
+        if(id){ listId=id; break; }
+      }
+
+      // Build items URL using GUID when available (avoids 404s from localized titles)
+      const itemsUrl = listId
+        ? `${base}/_api/web/lists(guid'${listId}')/items?$select=Id,Title,Status,Bucket,DueDate,StartDate,CompletedDate,PlannerTaskId,SiteCode&$orderby=Id%20desc`
+        : `${base}/_api/web/lists/getByTitle('${encodeURIComponent(title)}')/items?$select=Id,Title,Status,Bucket,DueDate,StartDate,CompletedDate,PlannerTaskId,SiteCode`;
+
+      const r = await fetch(itemsUrl,{ credentials:'same-origin', headers:{ Accept:'application/json;odata=nometadata' } });
+      logDiag('SPO planner items fetch', {url:itemsUrl, status:r && r.status});
+      if(!r.ok){ logDiag('SPO planner list fetch failed', {status:r.status}); return []; }
+      const j = await r.json();
+      return j && j.value ? j.value : [];
+    }catch(e){ logDiag('SPO planner list error', e && (e.message||String(e))); return []; }
+  }
+  try{
+    const spoCheckbox = document.getElementById('plannerSPO');
+    if(PLANNER_SPO_ENABLED || (spoCheckbox && spoCheckbox.checked)){
+      window.OTPlannerSPO = await fetchPlannerFromSPO();
+    }
+  }catch{}
+  renderTasks();
+
+  // ===== Colorful map with robust coords (Leaflet) =====
+  let mapRendered=false;
+  try{
+    // Load Leaflet: try local SiteAssets first, then CDN
+    async function ensureLeaflet(){
+      if(window.L && typeof window.L.map==='function') return true;
+      const base=_spPageContextInfo.webAbsoluteUrl.replace(/\/$/,'');
+      // Prefer CDN CSS to avoid local MIME-type issues; local is optional
+      const cssUrls=[
+        'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css',
+        base + '/SiteAssets/ot/leaflet.css',
+        base + '/SiteAssets/leaflet.css'
+      ];
+      const jsUrls = IS_DEV
+        ? [
+            'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js'
+          ]
+        : [
+            base + '/SiteAssets/ot/leaflet.js',
+            base + '/SiteAssets/leaflet.js',
+            'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js'
+          ];
+      function addCssOnce(url){
+        try{
+          if([...(document.styleSheets||[])].some(s=> s.href && s.href.indexOf('leaflet')!==-1)) return;
+        }catch{}
+        try{ const l=document.createElement('link'); l.rel='stylesheet'; l.href=url; document.head.appendChild(l); }catch{}
+      }
+      async function fetchText(u){
+        try{
+          const same = u.startsWith('/') || u.startsWith(base);
+          const r = await fetch(u,{credentials: same?'same-origin':'omit'});
+          if(!r.ok) return null;
+          return await r.text();
+        }catch{ return null }
+      }
+      function evalLeaflet(code){
+        // Shadow AMD/CommonJS globals so Leaflet exports to window.L only
+        const factory = new Function('window','document', 'var define, module, exports;\n' + code + '\n; return window.L;');
+        try{ return factory(window, document); }catch{ return null }
+      }
+      // Add CSS first
+      addCssOnce(cssUrls[0]);
+      for(const url of jsUrls){
+        const txt = await fetchText(url);
+        if(!txt) continue;
+        const Lns = evalLeaflet(txt);
+        if(Lns && typeof Lns.map==='function'){ window.L = Lns; return true; }
+      }
+      // Fallback: try CDN last-resort again
+      const cdn = await fetchText('https://unpkg.com/leaflet@1.9.4/dist/leaflet.js');
+      if(cdn){ const Lns = evalLeaflet(cdn); if(Lns && typeof Lns.map==='function'){ window.L = Lns; return true; } }
+      return !!(window.L && typeof window.L.map==='function');
+    }
+    let leafletOk=false; try{ leafletOk = await ensureLeaflet(); }catch(e){ logDiag('ensureLeaflet threw', (e&&e.message)||String(e)); }
+    logDiag('Leaflet load', {ok:leafletOk, hasL: !!window.L, version: window.L && window.L.version});
+    // Ensure essential Leaflet CSS is present (fallback inline) so tiles/markers render under CSP
+    try{
+      const css = `.leaflet-container{position:relative;outline:0}.leaflet-pane,.leaflet-tile,.leaflet-marker-icon,.leaflet-marker-shadow,.leaflet-zoom-box,.leaflet-image-layer,.leaflet-layer{position:absolute;left:0;top:0}.leaflet-tile{width:256px;height:256px}.leaflet-pane{z-index:400}.leaflet-map-pane{z-index:200}.leaflet-tile-pane{z-index:200}.leaflet-overlay-pane{z-index:400}.leaflet-shadow-pane{z-index:500}.leaflet-marker-pane{z-index:600}.leaflet-tooltip-pane{z-index:650}.leaflet-popup-pane{z-index:700}.leaflet-zoom-animated{transform-origin:0 0}.leaflet-zoom-anim .leaflet-zoom-animated{will-change:transform}.leaflet-marker-icon,.leaflet-marker-shadow{display:block}.leaflet-container .leaflet-control-attribution{background:rgba(255,255,255,.8);margin:0;padding:0 4px;border-radius:4px}`;
+      const st=document.createElement('style'); st.setAttribute('data-leaflet-inline','1'); st.textContent=css; document.head.appendChild(st);
+      logDiag('Injected inline Leaflet CSS fallback (unconditional)');
+    }catch{}
+    if(!leafletOk){ logDiag('Leaflet failed to load; using canvas fallback'); }
+
+    const map=L.map('map',{zoomControl:true, preferCanvas:true, scrollWheelZoom:false}).setView([20,0],2);
+    try{ map.touchZoom.disable(); map.doubleClickZoom.disable(); }catch{}
+    // Re-enable zoom on explicit user intent (Ctrl+wheel)
+    try{
+      const mapEl=document.getElementById('map');
+      mapEl.addEventListener('wheel', function(e){ if(e.ctrlKey){ try{ map.scrollWheelZoom.enable(); }catch{} } else { try{ map.scrollWheelZoom.disable(); }catch{} } }, {passive:true});
+    }catch{}
+    // Default provider only: Esri Light Gray
+    const providers=[
+      {name:'EsriLightGray', url:'https://services.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}', opts:{maxZoom:19, crossOrigin:true, attribution:'&copy; Esri'}}
+    ];
+    let baseLayer=null; let tilesOk=false;
+    function useProvider(i){
+      if(baseLayer){ map.removeLayer(baseLayer); baseLayer=null; }
+      if(i>=providers.length) return false;
+      const p=providers[i];
+      baseLayer=L.tileLayer(p.url,{detectRetina:true, ...p.opts}).addTo(map);
+      let failed=false; baseLayer.on('tileerror',(ev)=>{ logDiag('tileerror', {provider:p.name, src:ev && ev.tile && ev.tile.src}); if(!failed){ failed=true; useProvider(i+1); } });
+      baseLayer.on('load',()=>{ tilesOk=true; logDiag('tiles loaded', {provider:p.name}); try{ const pane=map.getPanes().overlayPane; if(pane&&pane.querySelectorAll){ pane.querySelectorAll('canvas[data-map-overlay="1"]').forEach(el=>{ try{ el.remove(); }catch{} }); } }catch{} });
+      document.getElementById('mapNote').textContent = `Map: ${p.name}`;
+      logDiag('Tile provider', {provider:p.name, url:p.url});
+      return true;
+    }
+    useProvider(0);
+
+    const pts=[];
+    // Build project summaries per site for informative popups
+    const bySite = PROJECTS.reduce((m,p)=>{
+      const sc = (p.Site||'').toString().trim().toUpperCase();
+      if(!sc) return m;
+      if(!m[sc]) m[sc] = [];
+      m[sc].push(p);
+      return m;
+    }, {});
+    // Prefer precise coords from Projects; fallback to Sites
+    PROJECTS.forEach(p=>{
+      const {lat, lon} = fixLatLon(p.Latitude, p.Longitude);
+      if(!isNaN(lat) && !isNaN(lon)){
+        const site = (p.Site||'');
+        const type = p.ProjectType? `[${p.ProjectType}] `: '';
+        const status = p.Status? ` (${p.Status})` : '';
+        const label = `${site} — ${type}${p.Project||''}${status}`.trim();
+        pts.push({site, lat, lon, label});
+      }
+    });
+    if(pts.length===0){
+      SITES.forEach(s=>{
+        const {lat, lon} = fixLatLon(s.Latitude, s.Longitude);
+        if(!isNaN(lat) && !isNaN(lon)){
+          const sc = (s.Site||'').toString().trim().toUpperCase();
+          const proj = bySite[sc]||[];
+          const types = Array.from(new Set(proj.map(p=>p.ProjectType).filter(Boolean)));
+          const top = types.length? ` — ${types.join(', ')}` : '';
+          pts.push({site:sc, lat, lon, label:`${sc}${top}`});
+        }
+      });
+    }
+
+    if(pts.length){
+      logDiag('Map points', {count:pts.length, sample:pts.slice(0,5)});
+      const group=L.layerGroup(pts.map(pt=>{
+        const m=L.circleMarker([pt.lat,pt.lon],{radius:7, weight:2, color:'#ffffff', fillColor:'#1A73E8', fillOpacity:0.95});
+        const sc = (pt.site||'').toString().trim().toUpperCase();
+        const projList = (bySite[sc]||[]);
+        const details = projList.length? `<div style="margin-top:4px">`+projList.map(p=>{
+          const t=p.ProjectType?`<b>[${p.ProjectType}]</b> `:'';
+          const s=p.Status?` <span style="color:#6B7280">(${p.Status})</span>`:'';
+          return `<div>${t}${p.Project||''}${s}</div>`;
+        }).join('')+`</div>` : '';
+        const html = `<div><b>${sc}</b>${details||''}</div>`;
+        m.bindPopup(html);
+        return m;
+      })).addTo(map);
+      try{ map.fitBounds(group.getBounds(),{padding:[24,24]}); }catch{}
+      setTimeout(()=>{ try{ map.invalidateSize(); }catch{} },120);
+      mapRendered=true;
+
+      // If tiles don't load within 2s, draw a canvas overlay fallback on top of the map
+      setTimeout(()=>{
+        try{
+          if(tilesOk) return;
+          logDiag('Tile load timeout → enabling canvas overlay fallback');
+          const pane = map.getPanes().overlayPane; const size = map.getSize(); if(!size||!size.x){ map.setView([20,0],2); }
+          const cnv=document.createElement('canvas'); cnv.setAttribute('data-map-overlay','1'); cnv.width=size.x; cnv.height=size.y; cnv.style.position='absolute'; cnv.style.left='0'; cnv.style.top='0'; cnv.style.pointerEvents='none'; pane.appendChild(cnv);
+          const ctx=cnv.getContext('2d');
+      function redraw(){
+            const s=map.getSize(); if(cnv.width!==s.x||cnv.height!==s.y){ cnv.width=s.x; cnv.height=s.y; }
+            // background gradient (softer blue → purple)
+            const g=ctx.createLinearGradient(0,0,0,cnv.height); g.addColorStop(0,'#dbeafe'); g.addColorStop(1,'#ede9fe'); ctx.fillStyle=g; ctx.fillRect(0,0,cnv.width,cnv.height);
+            // draw points
+            ctx.fillStyle='#1A73E8'; ctx.strokeStyle='#ffffff'; ctx.lineWidth=2;
+            pts.forEach(pt=>{ const p=map.latLngToContainerPoint([pt.lat,pt.lon]); ctx.beginPath(); ctx.arc(p.x,p.y,6,0,Math.PI*2); ctx.fill(); ctx.stroke(); });
+          }
+          redraw();
+          map.on('move zoom resize', ()=>{ try{ redraw(); }catch(e){ logDiag('overlay redraw error', (e&&e.message)||String(e)); } });
+          const noteEl=document.getElementById('mapNote'); if(noteEl) noteEl.textContent = 'Map: overlay (no tiles)';
+        }catch(e){ logDiag('overlay fallback error', (e&&e.message)||String(e)); }
+      }, 2000);
+    } else {
+      logDiag('No points to render; falling back to default view');
+      map.setView([20,0],2);
+    }
+  }catch(e){
+    note('Leaflet fallback: '+e.message);
+    logDiag('Leaflet exception', {error:e && (e.stack||e.message||String(e))});
+  }
+
+  // Canvas fallback (only if Leaflet failed)
+  if(!mapRendered){
+    try{
+      const el=document.getElementById('map');
+      const rect=el.getBoundingClientRect();
+      const w=Math.max(600, Math.floor(rect.width));
+      const h=420;
+      const cnv=document.createElement('canvas'); cnv.width=w; cnv.height=h; cnv.style.width='100%'; cnv.style.height=h+'px';
+      const ctx=cnv.getContext('2d');
+
+      // Try local colorful image, else gradient
+      async function tryLoadBasemap(){
+        const base=_spPageContextInfo.webAbsoluteUrl.replace(/\/$/,'');
+        const paths=[base + '/SiteAssets/ot/world_light_2048.png', base + '/SiteAssets/world_light_2048.png'];
+        for(const p of paths){
+          try{ await new Promise((res,rej)=>{ const img=new Image(); img.crossOrigin='anonymous'; img.onload=()=>{ ctx.drawImage(img,0,0,w,h); res(); }; img.onerror=rej; img.src=p; }); return true; }catch{}
+        }
+        return false;
+      }
+      let drew=await tryLoadBasemap();
+      logDiag('Canvas fallback basemap', {imageLoaded:drew});
+      if(!drew){ const g=ctx.createLinearGradient(0,0,0,h); g.addColorStop(0,'#e0f2fe'); g.addColorStop(1,'#ffffff'); ctx.fillStyle=g; ctx.fillRect(0,0,w,h); }
+
+      // Simple equirectangular plotter
+      const xFromLon=lon=> (lon+180)/360*w; const yFromLat=lat=> (90-lat)/180*h;
+
+      // Collect points as above
+      const pts=[];
+      PROJECTS.forEach(p=>{ const {lat,lon}=fixLatLon(p.Latitude,p.Longitude); if(!isNaN(lat)&&!isNaN(lon)) pts.push({lat,lon,label:(p.Site||'')}); });
+      if(!pts.length){ SITES.forEach(s=>{ const {lat,lon}=fixLatLon(s.Latitude,s.Longitude); if(!isNaN(lat)&&!isNaN(lon)) pts.push({lat,lon,label:(s.Site||'')}); }); }
+
+      ctx.fillStyle='#2563EB'; ctx.strokeStyle='#1D4ED8';
+      pts.forEach(pt=>{ const x=xFromLon(pt.lon), y=yFromLat(pt.lat); ctx.beginPath(); ctx.arc(x,y,5,0,Math.PI*2); ctx.fill(); ctx.stroke(); });
+      logDiag('Canvas points plotted', {count:pts.length});
+
+      el.innerHTML=''; el.appendChild(cnv);
+      document.getElementById('mapNote').textContent = 'Map: fallback (static - world image or graticule)';
+      logDiag('Map mode', 'fallback-static');
+    }catch{}
+  }
+
+})();
+</script>
