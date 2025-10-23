@@ -131,6 +131,12 @@ window._spPageContextInfo = window._spPageContextInfo || (function(){
                placeholder="TaskId,TaskName,TaskType,Status,PlannedDate,CompletedDate,Owner,AreaPath,IterationPath" 
                value="TaskId,TaskName,TaskType,Status,PlannedDate,CompletedDate,Owner,AreaPath,IterationPath">
       </div>
+      <div class="form-group">
+        <label class="form-label" for="devOpsExcludePaths">Exclude Area Paths (comma-separated):</label>
+        <input type="text" id="devOpsExcludePaths" class="form-input" 
+               placeholder="BAU,Maintenance,Support" 
+               value="BAU">
+      </div>
     </div>
     <div class="status info">
       <strong>📋 How to get a Personal Access Token:</strong><br>
@@ -1086,9 +1092,19 @@ tbody tr:hover{background:#EEF2FF}
       // Get work items from Azure DevOps
       const workItems = await getDevOpsWorkItems(org, project, token, query);
       
+      // Get exclude paths configuration
+      const excludePaths = document.getElementById('devOpsExcludePaths')?.value?.split(',').map(p => p.trim()).filter(Boolean) || ['BAU'];
+      
+      // Helper function to check if area path should be excluded
+      const shouldExcludeItem = (areaPath) => {
+        if (!areaPath) return false;
+        return excludePaths.some(excludePath => areaPath.includes(excludePath));
+      };
+      
       // Process work items into our data structure
       PROJECTS = workItems.filter(item => 
-        ['Project', 'Program', 'Epic'].includes(item.fields['System.WorkItemType'])
+        ['Project', 'Program', 'Epic'].includes(item.fields['System.WorkItemType']) &&
+        !shouldExcludeItem(item.fields['System.AreaPath'])
       ).map(item => ({
         id: item.id,
         Project: item.fields['System.Title'],
@@ -1109,7 +1125,8 @@ tbody tr:hover{background:#EEF2FF}
       }));
       
       TASKS = workItems.filter(item => 
-        ['Task', 'Bug', 'Issue', 'Requirement', 'Change Request', 'Enhancement'].includes(item.fields['System.WorkItemType'])
+        ['Task', 'Bug', 'Issue', 'Requirement', 'Change Request', 'Enhancement'].includes(item.fields['System.WorkItemType']) &&
+        !shouldExcludeItem(item.fields['System.AreaPath'])
       ).map(item => ({
         id: item.id,
         TaskId: item.id.toString(),
