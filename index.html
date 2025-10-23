@@ -838,23 +838,56 @@ tbody tr:hover{background:#EEF2FF}
   }
 
   // ===== SharePoint Integration Functions =====
-  // Simple OAuth2 authentication without MSAL dependency
+  // Manual token input approach for SharePoint authentication
   async function authenticateWithSharePoint() {
     try {
-      const clientId = "00000003-0000-0000-c000-000000000000"; // Microsoft Graph
-      const redirectUri = window.location.origin;
-      const scope = "https://graph.microsoft.com/.default";
-      const authority = "https://login.microsoftonline.com/common/oauth2/v2.0/authorize";
+      // Show manual token input dialog
+      const token = prompt(`
+🔐 SharePoint Authentication Required
+
+Since your organization's security policies prevent automatic authentication, 
+please follow these steps:
+
+1. Go to: https://developer.microsoft.com/en-us/graph/graph-explorer
+2. Sign in with your corporate account
+3. Click "Access Token" in the top right
+4. Copy the access token
+5. Paste it below
+
+Access Token:`);
+
+      if (!token || token.trim() === '') {
+        throw new Error('No access token provided');
+      }
+
+      // Test the token by making a simple Graph API call
+      const testResponse = await fetch('https://graph.microsoft.com/v1.0/me', {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (!testResponse.ok) {
+        throw new Error('Invalid access token. Please try again.');
+      }
+
+      accessToken = token;
       
-      // Store the current state for when we return
-      const state = Math.random().toString(36).substring(2, 15);
-      sessionStorage.setItem('oauth_state', state);
-      sessionStorage.setItem('oauth_redirect', window.location.href);
+      // Show success message
+      const statusDiv = document.createElement('div');
+      statusDiv.className = 'status success';
+      statusDiv.textContent = 'Successfully authenticated with SharePoint!';
+      document.getElementById('sharePointConfig').appendChild(statusDiv);
+      setTimeout(() => statusDiv.remove(), 3000);
       
-      const authUrl = `${authority}?client_id=${clientId}&response_type=token&redirect_uri=${encodeURIComponent(redirectUri)}&scope=${encodeURIComponent(scope)}&response_mode=fragment&state=${state}`;
+      // Update UI
+      document.getElementById('btnAuth').textContent = 'Signed In';
+      document.getElementById('btnAuth').style.display = 'none';
+      document.getElementById('btnLoadSharePoint').style.display = 'inline-block';
       
-      // Redirect to Microsoft login
-      window.location.href = authUrl;
+      logDiag('Manual SharePoint authentication successful');
+      return true;
       
     } catch (error) {
       logDiag('SharePoint authentication failed:', error);
@@ -862,35 +895,35 @@ tbody tr:hover{background:#EEF2FF}
     }
   }
 
-  // Check for OAuth2 callback and extract token
-  function checkOAuthCallback() {
+  // Check for OAuth2 callback and handle authorization code
+  async function checkOAuthCallback() {
     try {
-      const hash = window.location.hash;
-      if (hash && hash.includes('access_token=')) {
-        const params = new URLSearchParams(hash.substring(1));
-        const token = params.get('access_token');
-        const state = params.get('state');
-        const storedState = sessionStorage.getItem('oauth_state');
+      const urlParams = new URLSearchParams(window.location.search);
+      const code = urlParams.get('code');
+      const state = urlParams.get('state');
+      const storedState = sessionStorage.getItem('oauth_state');
+      
+      if (code && state === storedState) {
+        // We have an authorization code, now we need to exchange it for a token
+        // Since we can't do this client-side securely, we'll use a different approach
+        sessionStorage.removeItem('oauth_state');
         
-        if (token && state === storedState) {
-          accessToken = token;
-          sessionStorage.removeItem('oauth_state');
-          
-          // Show success message
-          const statusDiv = document.createElement('div');
-          statusDiv.className = 'status success';
-          statusDiv.textContent = 'Successfully signed in to SharePoint!';
-          document.getElementById('sharePointConfig').appendChild(statusDiv);
-          setTimeout(() => statusDiv.remove(), 3000);
-          
-          // Update UI
-          document.getElementById('btnAuth').textContent = 'Signed In';
-          document.getElementById('btnAuth').style.display = 'none';
-          document.getElementById('btnLoadSharePoint').style.display = 'inline-block';
-          
-          logDiag('OAuth2 authentication successful');
-          return true;
-        }
+        // For now, show a message that the user needs to use a different method
+        const statusDiv = document.createElement('div');
+        statusDiv.className = 'status error';
+        statusDiv.innerHTML = `
+          <strong>⚠️ Authentication Method Not Supported</strong><br><br>
+          The authorization code flow requires server-side token exchange, which isn't available in this client-side implementation.<br><br>
+          <strong>Alternative solutions:</strong><br>
+          1. Use Excel mode with local files<br>
+          2. Contact your IT administrator to set up a proper OAuth2 application<br>
+          3. Use SharePoint directly in your browser
+        `;
+        document.getElementById('sharePointConfig').appendChild(statusDiv);
+        setTimeout(() => statusDiv.remove(), 15000);
+        
+        logDiag('Authorization code received but cannot exchange for token client-side');
+        return false;
       }
     } catch (error) {
       logDiag('OAuth2 callback error:', error);
@@ -1382,13 +1415,15 @@ tbody tr:hover{background:#EEF2FF}
     statusDiv.className = 'status info';
     statusDiv.innerHTML = `
       <strong>🔐 SharePoint Authentication Help</strong><br><br>
-      <strong>How it works:</strong> Click "Sign In to SharePoint" to redirect to Microsoft's login page.<br><br>
-      <strong>After login:</strong> You'll be redirected back to this dashboard with access to your SharePoint data.<br><br>
-      <strong>If it doesn't work:</strong> Check that your organization allows Microsoft Graph API access.<br><br>
-      <strong>Note:</strong> This method doesn't require any external libraries, so it should work even with strict security policies.
+      <strong>Step 1:</strong> Go to <a href="https://developer.microsoft.com/en-us/graph/graph-explorer" target="_blank">Microsoft Graph Explorer</a><br><br>
+      <strong>Step 2:</strong> Sign in with your corporate Microsoft account<br><br>
+      <strong>Step 3:</strong> Click "Access Token" in the top right corner<br><br>
+      <strong>Step 4:</strong> Copy the access token that appears<br><br>
+      <strong>Step 5:</strong> Click "Sign In to SharePoint" and paste the token when prompted<br><br>
+      <strong>Note:</strong> This method works around corporate security restrictions and doesn't require any special permissions.
     `;
     document.getElementById('sharePointConfig').appendChild(statusDiv);
-    setTimeout(() => statusDiv.remove(), 10000);
+    setTimeout(() => statusDiv.remove(), 15000);
   });
 
   document.getElementById('btnLoadSharePoint').addEventListener('click', async function() {
