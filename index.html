@@ -753,14 +753,6 @@ tbody tr:hover{background:#EEF2FF}
 
   const uniq=a=>[...new Set(a.filter(v=>v!==null&&v!==undefined&&v!==""))];
 
-  // Helper function to check if area path should be excluded
-  const shouldExcludeItem = (areaPath) => {
-    if (!areaPath) return false;
-    const excludePaths = document.getElementById('devOpsExcludePaths')?.value?.split(',').map(p => p.trim()).filter(Boolean) || ['BAU', 'BEA 2025 Continuous'];
-    const areaPathLower = areaPath.toLowerCase();
-    return excludePaths.some(excludePath => areaPathLower.includes(excludePath.toLowerCase()));
-  };
-
   // getBU — single definition
   const getBU = (r)=>{
     const bu = String(r.BusinessUnit||r.BU||'').trim().toUpperCase();
@@ -776,6 +768,14 @@ tbody tr:hover{background:#EEF2FF}
     if(reg==='na'||reg==='n.a.'||reg==='north america') return 'BNA';
     if(reg==='sa'||reg==='s.a.'||reg==='south america') return 'BSA';
     return 'Other';
+  };
+
+  // Helper function to check if area path should be excluded
+  const shouldExcludeItem = (areaPath) => {
+    if (!areaPath) return false;
+    const excludePaths = document.getElementById('devOpsExcludePaths')?.value?.split(',').map(p => p.trim()).filter(Boolean) || ['BAU', 'BEA 2025 Continuous'];
+    const areaPathLower = areaPath.toLowerCase();
+    return excludePaths.some(excludePath => areaPathLower.includes(excludePath.toLowerCase()));
   };
 
   function toBool(v){
@@ -1430,7 +1430,7 @@ tbody tr:hover{background:#EEF2FF}
 
   // Prompt for DevOps PAT on load
   async function promptForDevOpsCredentials() {
-    const token = prompt(`🔑 Personal Access Token Required:\n\nTo get a Personal Access Token:\n1. Go to https://dev.azure.com/BungeDev/_usersSettings/tokens\n2. Click "New Token"\n3. Set scope to "Work Items (Read)"\n4. Copy the token and paste it below:\n\nToken:`);
+    const token = prompt('🔑 Enter your Azure DevOps Personal Access Token:');
     if (!token) {
       showErr('Personal Access Token is required to load data from Azure DevOps.');
       return false;
