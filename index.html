@@ -8,8 +8,8 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
-    <!-- MSAL.js for Microsoft authentication -->
-    <script src="https://alcdn.msauth.net/browser/2.38.3/js/msal-browser.min.js"></script>
+<!-- MSAL.js for Microsoft authentication -->
+<script src="https://alcdn.msauth.net/browser/2.38.3/js/msal-browser.min.js" onerror="console.error('Failed to load MSAL from CDN')"></script>
 
 
 
@@ -64,6 +64,12 @@ window._spPageContextInfo = window._spPageContextInfo || (function(){
     <h1 style="color:#000">Global OT Infrastructure Improvements <span style="color:#DC2626">(under development)</span></h1>
   </div>
 
+  <!-- Help message for SharePoint mode -->
+  <div id="helpMessage" class="status info" style="display:none;">
+    <strong>📋 No Excel files found.</strong> This dashboard is designed to work with SharePoint data. 
+    Please select "SharePoint Lists" above and configure your corporate SharePoint connection to load live data.
+  </div>
+
   <!-- Compact “friendly” status -->
   <div id="status" class="meta" style="margin:4px 0 10px 0"></div>
 
@@ -87,6 +93,7 @@ window._spPageContextInfo = window._spPageContextInfo || (function(){
     </label>
     <button id="btnAuth" class="btn primary" style="display:none">Sign In to SharePoint</button>
     <button id="btnLoadSharePoint" class="btn primary" style="display:none">Load from SharePoint</button>
+    <button id="btnManualAuth" class="btn" style="display:none">Manual Authentication Help</button>
   </div>
 
   <!-- SharePoint Configuration (hidden by default) -->
@@ -880,6 +887,17 @@ tbody tr:hover{background:#EEF2FF}
     }
   }
 
+  // Simple authentication method - redirect to Microsoft login
+  async function authenticateWithSharePointSimple() {
+    try {
+      // For now, just show instructions to the user
+      throw new Error('MSAL library failed to load. Please try refreshing the page, or contact your administrator for help with SharePoint authentication.');
+    } catch (error) {
+      logDiag('Simple SharePoint authentication failed:', error);
+      throw error;
+    }
+  }
+
   async function getSharePointSiteId(siteUrl) {
     try {
       const response = await fetch(`https://graph.microsoft.com/v1.0/sites/${encodeURIComponent(siteUrl)}`, {
@@ -1007,10 +1025,17 @@ tbody tr:hover{background:#EEF2FF}
   }
 
   if(!DATA_LOADED){
-  const consolidated = await fetchConsolidated(['OTdev.xlsx','OT.xlsx','OT_Data.xlsx']);
-  logDiag('Consolidated workbook', {found: !!consolidated, rel: consolidated && consolidated.rel});
+  // Try to load Excel files, but don't fail if they don't exist
+  let consolidated = null;
+  try {
+    consolidated = await fetchConsolidated(['OTdev.xlsx','OT.xlsx','OT_Data.xlsx']);
+    logDiag('Consolidated workbook', {found: !!consolidated, rel: consolidated && consolidated.rel});
+  } catch(e) {
+    logDiag('Excel files not found, using SharePoint mode only', e.message);
+  }
+  
   try{
-    const xl = DATA_LOADED? [] : (consolidated? consolidated.projects : await fetchXlsxName('projects.xlsx', FILE_PATHS.projects));
+    const xl = DATA_LOADED? [] : (consolidated? consolidated.projects : await fetchXlsxName('projects.xlsx', FILE_PATHS.projects).catch(() => []));
     if(!DATA_LOADED){ PROJECTS = (xl||[]).map(b=>({
       ...b,
       BusinessUnit:b.BusinessUnit||b.BU||'',
@@ -1031,10 +1056,14 @@ tbody tr:hover{background:#EEF2FF}
       Longitude:b.Longitude||b.lon||b.Lon||b.Lng
     })); }
     next("Loading tasks…");
-  }catch(e){ logDiag('Projects load failed', (e&&e.message)||String(e)); showErr('Could not load projects.'); hideLoader(); return; }
+  }catch(e){ 
+    logDiag('Projects load failed, continuing with empty data', (e&&e.message)||String(e)); 
+    PROJECTS = [];
+    next("Loading tasks…");
+  }
 
   try{
-    const xl = DATA_LOADED? [] : (consolidated? consolidated.tasks : await fetchXlsxName('tasks.xlsx', FILE_PATHS.tasks));
+    const xl = DATA_LOADED? [] : (consolidated? consolidated.tasks : await fetchXlsxName('tasks.xlsx', FILE_PATHS.tasks).catch(() => []));
     if(!DATA_LOADED){ TASKS = (xl||[]).map(b=>({
       ...b,
       BusinessUnit:b.BusinessUnit||b.BU||'',
@@ -1046,10 +1075,14 @@ tbody tr:hover{background:#EEF2FF}
       CompletedDate:b.CompletedDate||b.Completed
     })).map(normalizeTaskRow); }
     next("Loading sites…");
-  }catch(e){ logDiag('Tasks load failed', (e&&e.message)||String(e)); showErr('Could not load tasks.'); hideLoader(); return; }
+  }catch(e){ 
+    logDiag('Tasks load failed, continuing with empty data', (e&&e.message)||String(e)); 
+    TASKS = [];
+    next("Loading sites…");
+  }
 
   try{
-    const xl = DATA_LOADED? [] : (consolidated? consolidated.sites : await fetchXlsxName('sites_inventory.xlsx', FILE_PATHS.sites));
+    const xl = DATA_LOADED? [] : (consolidated? consolidated.sites : await fetchXlsxName('sites_inventory.xlsx', FILE_PATHS.sites).catch(() => []));
     if(!DATA_LOADED){ SITES = (xl||[]).map(b=>({
       ...b,
       BusinessUnit:b.BusinessUnit||b.BU||'',
@@ -1065,7 +1098,11 @@ tbody tr:hover{background:#EEF2FF}
       Longitude: b.Longitude ?? b.lon ?? b.Lon ?? b.Lng
     })); }
     next("Rendering…");
-  }catch(e){ logDiag('Sites load failed', (e&&e.message)||String(e)); showErr('Could not load sites.'); hideLoader(); return; }
+  }catch(e){ 
+    logDiag('Sites load failed, continuing with empty data', (e&&e.message)||String(e)); 
+    SITES = [];
+    next("Rendering…");
+  }
   }
 
   // Column audit (after normalization)
@@ -1305,6 +1342,7 @@ tbody tr:hover{background:#EEF2FF}
       document.getElementById('sharePointConfig').style.display = 'block';
       document.getElementById('btnAuth').style.display = 'inline-block';
       document.getElementById('btnLoadSharePoint').style.display = 'none';
+      document.getElementById('btnManualAuth').style.display = 'inline-block';
     }
   });
 
@@ -1313,47 +1351,51 @@ tbody tr:hover{background:#EEF2FF}
       this.disabled = true;
       this.textContent = 'Signing in...';
       
-      // Check if MSAL is available
-      if (!window.msal) {
-        // Try to load MSAL dynamically
-        const script = document.createElement('script');
-        script.src = 'https://alcdn.msauth.net/browser/2.38.3/js/msal-browser.min.js';
-        script.onload = async () => {
+      // Try multiple CDN sources for MSAL
+      const msalSources = [
+        'https://alcdn.msauth.net/browser/2.38.3/js/msal-browser.min.js',
+        'https://cdn.jsdelivr.net/npm/@azure/msal-browser@2.38.3/dist/msal-browser.min.js',
+        'https://unpkg.com/@azure/msal-browser@2.38.3/dist/msal-browser.min.js'
+      ];
+      
+      let msalLoaded = false;
+      
+      // Check if MSAL is already loaded
+      if (window.msal && window.msal.PublicClientApplication) {
+        msalLoaded = true;
+      } else {
+        // Try to load MSAL from different sources
+        for (const source of msalSources) {
           try {
-            await authenticateWithSharePoint();
-            this.textContent = 'Signed In';
-            this.style.display = 'none';
-            document.getElementById('btnLoadSharePoint').style.display = 'inline-block';
-            
-            const statusDiv = document.createElement('div');
-            statusDiv.className = 'status success';
-            statusDiv.textContent = 'Successfully signed in to SharePoint!';
-            document.getElementById('sharePointConfig').appendChild(statusDiv);
-            setTimeout(() => statusDiv.remove(), 3000);
-          } catch (error) {
-            this.disabled = false;
-            this.textContent = 'Sign In to SharePoint';
-            const statusDiv = document.createElement('div');
-            statusDiv.className = 'status error';
-            statusDiv.textContent = 'Authentication failed: ' + error.message;
-            document.getElementById('sharePointConfig').appendChild(statusDiv);
-            setTimeout(() => statusDiv.remove(), 5000);
+            await new Promise((resolve, reject) => {
+              const script = document.createElement('script');
+              script.src = source;
+              script.onload = () => {
+                if (window.msal && window.msal.PublicClientApplication) {
+                  msalLoaded = true;
+                  resolve();
+                } else {
+                  reject(new Error('MSAL not available after loading'));
+                }
+              };
+              script.onerror = () => reject(new Error('Failed to load from ' + source));
+              document.head.appendChild(script);
+            });
+            break; // If successful, break out of the loop
+          } catch (e) {
+            console.log('Failed to load MSAL from', source, e.message);
+            continue; // Try next source
           }
-        };
-        script.onerror = () => {
-          this.disabled = false;
-          this.textContent = 'Sign In to SharePoint';
-          const statusDiv = document.createElement('div');
-          statusDiv.className = 'status error';
-          statusDiv.textContent = 'Failed to load authentication library. Please refresh the page.';
-          document.getElementById('sharePointConfig').appendChild(statusDiv);
-          setTimeout(() => statusDiv.remove(), 5000);
-        };
-        document.head.appendChild(script);
-        return;
+        }
       }
       
-      await authenticateWithSharePoint();
+      if (!msalLoaded) {
+        // Try simple OAuth2 method as fallback
+        logDiag('MSAL not available, trying simple OAuth2 method');
+        await authenticateWithSharePointSimple();
+      } else {
+        await authenticateWithSharePoint();
+      }
       
       this.textContent = 'Signed In';
       this.style.display = 'none';
@@ -1377,6 +1419,20 @@ tbody tr:hover{background:#EEF2FF}
       document.getElementById('sharePointConfig').appendChild(statusDiv);
       setTimeout(() => statusDiv.remove(), 5000);
     }
+  });
+
+  document.getElementById('btnManualAuth').addEventListener('click', function() {
+    const statusDiv = document.createElement('div');
+    statusDiv.className = 'status info';
+    statusDiv.innerHTML = `
+      <strong>🔐 Manual Authentication Help</strong><br><br>
+      <strong>Option 1:</strong> Try refreshing the page and clicking "Sign In to SharePoint" again.<br><br>
+      <strong>Option 2:</strong> Check if your organization blocks certain CDN resources. Contact your IT administrator.<br><br>
+      <strong>Option 3:</strong> Try using a different browser or incognito/private mode.<br><br>
+      <strong>Option 4:</strong> The Microsoft Authentication Library may be temporarily unavailable. Try again later.
+    `;
+    document.getElementById('sharePointConfig').appendChild(statusDiv);
+    setTimeout(() => statusDiv.remove(), 10000);
   });
 
   document.getElementById('btnLoadSharePoint').addEventListener('click', async function() {
@@ -1467,7 +1523,14 @@ tbody tr:hover{background:#EEF2FF}
   render(); renderTasks();
 
   // Compact final status (friendly line)
-  statusEl.textContent = `Loaded Projects: ${PROJECTS.length} • Tasks: ${TASKS.length} • Sites: ${SITES.length}`;
+  if (PROJECTS.length === 0 && TASKS.length === 0 && SITES.length === 0) {
+    statusEl.textContent = `No data loaded. Please use SharePoint mode to load data from your corporate SharePoint.`;
+    statusEl.style.color = '#D97706';
+    document.getElementById('helpMessage').style.display = 'block';
+  } else {
+    statusEl.textContent = `Loaded Projects: ${PROJECTS.length} • Tasks: ${TASKS.length} • Sites: ${SITES.length}`;
+    document.getElementById('helpMessage').style.display = 'none';
+  }
   logDiag('Data loaded counts', {projects:PROJECTS.length, tasks:TASKS.length, sites:SITES.length});
   hideLoader();
 
