@@ -87,12 +87,51 @@ window._spPageContextInfo = window._spPageContextInfo || (function(){
       <span>Excel Files</span>
     </label>
     <label style="display:flex;align-items:center;gap:8px">
+      <input type="radio" name="dataSource" value="devops" id="dataSourceDevOps"/>
+      <span>Azure DevOps (Real-time)</span>
+    </label>
+    <label style="display:flex;align-items:center;gap:8px">
       <input type="radio" name="dataSource" value="sharepoint" id="dataSourceSharePoint"/>
       <span>SharePoint Lists</span>
     </label>
     <button id="btnAuth" class="btn primary" style="display:none">Sign In to SharePoint</button>
     <button id="btnLoadSharePoint" class="btn primary" style="display:none">Load from SharePoint</button>
+    <button id="btnLoadDevOps" class="btn primary" style="display:none">Load from Azure DevOps</button>
     <button id="btnManualAuth" class="btn" style="display:none">Manual Authentication Help</button>
+  </div>
+
+  <!-- Azure DevOps Configuration (hidden by default) -->
+  <div id="devOpsConfig" class="config-section" style="display:none;">
+    <h3>Azure DevOps Configuration</h3>
+    <div class="config-grid">
+      <div class="form-group">
+        <label class="form-label" for="devOpsOrg">Organization:</label>
+        <input type="text" id="devOpsOrg" class="form-input" 
+               placeholder="BungeDev" value="BungeDev">
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="devOpsProject">Project:</label>
+        <input type="text" id="devOpsProject" class="form-input" 
+               placeholder="OT Global Infrastructure" value="OT Global Infrastructure">
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="devOpsToken">Personal Access Token:</label>
+        <input type="password" id="devOpsToken" class="form-input" 
+               placeholder="Enter your Azure DevOps PAT">
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="devOpsQuery">Work Items Query (optional):</label>
+        <input type="text" id="devOpsQuery" class="form-input" 
+               placeholder="Leave empty to get all work items">
+      </div>
+    </div>
+    <div class="status info">
+      <strong>📋 How to get a Personal Access Token:</strong><br>
+      1. Go to <a href="https://dev.azure.com/BungeDev/_usersSettings/tokens" target="_blank">Azure DevOps User Settings</a><br>
+      2. Click "New Token"<br>
+      3. Set scope to "Work Items (Read)"<br>
+      4. Copy the token and paste it above
+    </div>
   </div>
 
   <!-- SharePoint Configuration (hidden by default) -->
@@ -837,6 +876,162 @@ tbody tr:hover{background:#EEF2FF}
     return row;
   }
 
+  // ===== Azure DevOps Integration Functions =====
+  async function loadDataFromDevOps() {
+    try {
+      const org = document.getElementById('devOpsOrg').value;
+      const project = document.getElementById('devOpsProject').value;
+      const token = document.getElementById('devOpsToken').value;
+      const query = document.getElementById('devOpsQuery').value;
+      
+      if (!org || !project || !token) {
+        throw new Error('Please fill in Organization, Project, and Personal Access Token');
+      }
+      
+      next("Loading Azure DevOps data…");
+      logDiag('Loading data from Azure DevOps', {org, project, query: query || 'all work items'});
+      
+      // Get work items from Azure DevOps
+      const workItems = await getDevOpsWorkItems(org, project, token, query);
+      
+      // Process work items into our data structure
+      PROJECTS = workItems.filter(item => 
+        ['Project', 'Program', 'Epic'].includes(item.fields['System.WorkItemType'])
+      ).map(item => ({
+        id: item.id,
+        Project: item.fields['System.Title'],
+        Status: item.fields['System.State'],
+        Owner: item.fields['System.AssignedTo']?.displayName || '',
+        Region: item.fields['Custom.Region'] || '',
+        Site: item.fields['Custom.SiteCode'] || '',
+        ProjectType: item.fields['System.WorkItemType'],
+        Description: item.fields['System.Description'] || '',
+        AreaPath: item.fields['System.AreaPath'] || '',
+        IterationPath: item.fields['System.IterationPath'] || '',
+        CreatedDate: item.fields['System.CreatedDate'],
+        ChangedDate: item.fields['System.ChangedDate'],
+        BusinessUnit: extractBusinessUnit(item.fields['System.AreaPath'] || ''),
+        Year: extractYear(item.fields['System.IterationPath'] || ''),
+        Latitude: null, // Not available in DevOps
+        Longitude: null // Not available in DevOps
+      }));
+      
+      TASKS = workItems.filter(item => 
+        ['Task', 'Bug', 'Issue', 'Requirement', 'Change Request', 'Enhancement'].includes(item.fields['System.WorkItemType'])
+      ).map(item => ({
+        id: item.id,
+        TaskId: item.id.toString(),
+        TaskName: item.fields['System.Title'],
+        Status: item.fields['System.State'],
+        Owner: item.fields['System.AssignedTo']?.displayName || '',
+        Region: item.fields['Custom.Region'] || '',
+        Site: item.fields['Custom.SiteCode'] || '',
+        TaskType: item.fields['System.WorkItemType'],
+        Description: item.fields['System.Description'] || '',
+        AreaPath: item.fields['System.AreaPath'] || '',
+        IterationPath: item.fields['System.IterationPath'] || '',
+        CreatedDate: item.fields['System.CreatedDate'],
+        ChangedDate: item.fields['System.ChangedDate'],
+        PlannedDate: item.fields['Microsoft.VSTS.Scheduling.StartDate'],
+        CompletedDate: item.fields['Microsoft.VSTS.Common.ClosedDate'],
+        BusinessUnit: extractBusinessUnit(item.fields['System.AreaPath'] || ''),
+        Year: extractYear(item.fields['System.IterationPath'] || '')
+      })).map(normalizeTaskRow);
+      
+      // For sites, we'll create a summary from the work items
+      SITES = [];
+      const siteCodes = [...new Set(workItems.map(item => item.fields['Custom.SiteCode']).filter(Boolean))];
+      siteCodes.forEach(siteCode => {
+        const siteItems = workItems.filter(item => item.fields['Custom.SiteCode'] === siteCode);
+        SITES.push({
+          Site: siteCode,
+          Region: siteItems[0]?.fields['Custom.Region'] || '',
+          BusinessUnit: extractBusinessUnit(siteItems[0]?.fields['System.AreaPath'] || ''),
+          ProjectCount: siteItems.filter(item => ['Project', 'Program'].includes(item.fields['System.WorkItemType'])).length,
+          TaskCount: siteItems.filter(item => ['Task', 'Bug', 'Issue', 'Requirement'].includes(item.fields['System.WorkItemType'])).length,
+          Latitude: null, // Not available in DevOps
+          Longitude: null // Not available in DevOps
+        });
+      });
+      
+      logDiag('Azure DevOps data loaded', {projects: PROJECTS.length, tasks: TASKS.length, sites: SITES.length});
+      return true;
+    } catch (error) {
+      logDiag('Failed to load Azure DevOps data:', error);
+      throw error;
+    }
+  }
+
+  async function getDevOpsWorkItems(org, project, token, query) {
+    try {
+      let url = `https://dev.azure.com/${org}/${project}/_apis/wit/wiql?api-version=7.0`;
+      
+      // If no specific query, get all work items
+      const wiqlQuery = query || `
+        SELECT [System.Id], [System.Title], [System.WorkItemType], [System.State], [System.AssignedTo], 
+               [System.AreaPath], [System.IterationPath], [System.CreatedDate], [System.ChangedDate],
+               [System.Description], [Custom.Region], [Custom.SiteCode],
+               [Microsoft.VSTS.Scheduling.StartDate], [Microsoft.VSTS.Common.ClosedDate]
+        FROM WorkItems 
+        WHERE [System.TeamProject] = '${project}'
+        ORDER BY [System.ChangedDate] DESC
+      `;
+      
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Basic ${btoa(':' + token)}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ query: wiqlQuery })
+      });
+      
+      if (!response.ok) {
+        throw new Error(`Azure DevOps API error: ${response.status} ${response.statusText}`);
+      }
+      
+      const queryResult = await response.json();
+      
+      if (!queryResult.workItems || queryResult.workItems.length === 0) {
+        return [];
+      }
+      
+      // Get detailed work item data
+      const workItemIds = queryResult.workItems.map(item => item.id);
+      const detailsUrl = `https://dev.azure.com/${org}/${project}/_apis/wit/workitems?ids=${workItemIds.join(',')}&api-version=7.0&$expand=all`;
+      
+      const detailsResponse = await fetch(detailsUrl, {
+        headers: {
+          'Authorization': `Basic ${btoa(':' + token)}`,
+          'Content-Type': 'application/json'
+        }
+      });
+      
+      if (!detailsResponse.ok) {
+        throw new Error(`Azure DevOps details API error: ${detailsResponse.status} ${detailsResponse.statusText}`);
+      }
+      
+      const detailsResult = await detailsResponse.json();
+      return detailsResult.value || [];
+      
+    } catch (error) {
+      logDiag('Error getting Azure DevOps work items:', error);
+      throw error;
+    }
+  }
+
+  function extractBusinessUnit(areaPath) {
+    if (areaPath.includes('BEA')) return 'BEA';
+    if (areaPath.includes('BNA')) return 'BNA';
+    if (areaPath.includes('BSA')) return 'BSA';
+    return 'Other';
+  }
+
+  function extractYear(iterationPath) {
+    const yearMatch = iterationPath.match(/(\d{4})/);
+    return yearMatch ? parseInt(yearMatch[1]) : new Date().getFullYear();
+  }
+
   // ===== SharePoint Integration Functions =====
   // Manual token input approach for SharePoint authentication
   async function authenticateWithSharePoint() {
@@ -1377,10 +1572,23 @@ Access Token:`);
     document.getElementById('btnManualAuth').style.display = 'inline-block';
   }
 
-  // SharePoint UI event listeners
+  // Data source UI event listeners
   document.getElementById('dataSourceExcel').addEventListener('change', function() {
     if (this.checked) {
+      document.getElementById('devOpsConfig').style.display = 'none';
       document.getElementById('sharePointConfig').style.display = 'none';
+      document.getElementById('btnLoadDevOps').style.display = 'none';
+      document.getElementById('btnAuth').style.display = 'none';
+      document.getElementById('btnLoadSharePoint').style.display = 'none';
+      document.getElementById('btnManualAuth').style.display = 'none';
+    }
+  });
+
+  document.getElementById('dataSourceDevOps').addEventListener('change', function() {
+    if (this.checked) {
+      document.getElementById('devOpsConfig').style.display = 'block';
+      document.getElementById('sharePointConfig').style.display = 'none';
+      document.getElementById('btnLoadDevOps').style.display = 'inline-block';
       document.getElementById('btnAuth').style.display = 'none';
       document.getElementById('btnLoadSharePoint').style.display = 'none';
       document.getElementById('btnManualAuth').style.display = 'none';
@@ -1432,6 +1640,73 @@ Access Token:`);
     `;
     document.getElementById('sharePointConfig').appendChild(statusDiv);
     setTimeout(() => statusDiv.remove(), 20000);
+  });
+
+  document.getElementById('btnLoadDevOps').addEventListener('click', async function() {
+    try {
+      this.disabled = true;
+      this.textContent = 'Loading...';
+      
+      await loadDataFromDevOps();
+      
+      // Continue with existing rendering logic
+      next("Rendering…");
+      
+      // Update UI elements
+      const types=uniq(PROJECTS.map(p=>p.ProjectType)).sort();
+      const bus=uniq(SITES.map(getBU)).filter(v=>v && v!=='Other');
+      const years=uniq(PROJECTS.map(p=>p.Year)).sort((a,b)=>String(a).localeCompare(String(b)));
+      const statuses=uniq(PROJECTS.map(p=>p.Status||'')).sort();
+      const fill=(el,arr,lbl)=>el.innerHTML=`<option value="">All ${lbl||""}</option>`+arr.map(v=>`<option>${v}</option>`).join("");
+      fill(document.getElementById('fBU'), (bus.length?bus:['BEA','BNA','BSA']).sort(), 'Region');
+      fill(document.getElementById("fType"),types,"Types");
+      fill(document.getElementById("fYear"),years,"Years");
+      fill(document.getElementById("fStatus"),statuses,"Statuses");
+
+      // Update inventory KPIs
+      const countTrue=col=>SITES.filter(s=> s && toBool(s[col])===true).length;
+      const invDefs=[
+        {name:"New OT Network IP",col:"UsesNewOTNetworkIP"},
+        {name:"Monitored (SolarWinds OT)",col:"MonitoredSolarWindsOT"},
+        {name:"Monitored (SINEC OT)",col:"MonitoredSinecNMSOT"},
+        {name:"In OT vSphere",col:"InOTvSphere"},
+        {name:"Local OT Domain Controller",col:"LocalOTDomainController"}
+      ];
+      const invHtml=invDefs.map(k=>`<div class="card"><div class="label">${k.name}</div><div class="value">${countTrue(k.col)}</div></div>`).join("");
+      const buSel = document.getElementById('fBU').value;
+      if(!buSel){
+        const buCards = ['BEA','BNA','BSA'].map(b=>{
+          const nSites = SITES.filter(s=> getBU(s)===b).length || 0;
+          return `<div class="card bu ${b}"><div class="label">${b}</div><div class="value">${nSites}</div></div>`;
+        }).join('');
+        document.getElementById("kpiInventory").innerHTML = invHtml + `<div class="kpi bu-strip">${buCards}</div>`;
+      } else {
+        document.getElementById("kpiInventory").innerHTML = invHtml;
+      }
+
+      // Update site picker
+      const siteOptions = siteCodes.slice().sort();
+      document.getElementById("sitePick").innerHTML=`<option value="">Select a site</option>`+siteOptions.map(s=>`<option>${s}</option>`).join("");
+
+      // Render the dashboard
+      render(); 
+      renderTasks();
+      
+      // Update status
+      statusEl.textContent = `Loaded Projects: ${PROJECTS.length} • Tasks: ${TASKS.length} • Sites: ${SITES.length} (from Azure DevOps)`;
+      logDiag('Azure DevOps data loaded and rendered', {projects:PROJECTS.length, tasks:TASKS.length, sites:SITES.length});
+      hideLoader();
+      
+      this.textContent = 'Reload from Azure DevOps';
+      this.disabled = false;
+      
+    } catch (error) {
+      this.disabled = false;
+      this.textContent = 'Load from Azure DevOps';
+      
+      showErr('Failed to load data from Azure DevOps: ' + error.message);
+      logDiag('Azure DevOps load error:', error);
+    }
   });
 
   document.getElementById('btnLoadSharePoint').addEventListener('click', async function() {
