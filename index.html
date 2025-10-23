@@ -747,7 +747,7 @@ tbody tr:hover{background:#EEF2FF}
     })(0);
   }catch{}
 
-  let PROJECTS=[],TASKS=[],SITES=[];
+  let PROJECTS=[],TASKS=[],SITES=[], siteCodes=[];
 
 
 
@@ -946,7 +946,8 @@ tbody tr:hover{background:#EEF2FF}
       
       // For sites, we'll create a summary from the work items
       SITES = [];
-      const siteCodes = [...new Set(workItems.map(item => item.fields['Custom.SiteCode']).filter(Boolean))];
+      siteCodes = [...new Set(workItems.map(item => item.fields['Custom.SiteCode']).filter(Boolean))];
+      logDiag('Extracted site codes from Azure DevOps:', siteCodes);
       siteCodes.forEach(siteCode => {
         const siteItems = workItems.filter(item => item.fields['Custom.SiteCode'] === siteCode);
         SITES.push({
@@ -1123,6 +1124,7 @@ tbody tr:hover{background:#EEF2FF}
 
         // Update site picker
         const siteOptions = siteCodes.slice().sort();
+        logDiag('Populating site picker with options:', siteOptions);
         document.getElementById("sitePick").innerHTML=`<option value="">Select a site</option>`+siteOptions.map(s=>`<option>${s}</option>`).join("");
 
         // Render the dashboard
@@ -1164,8 +1166,8 @@ tbody tr:hover{background:#EEF2FF}
     );
   }catch{}
 
-  // Canonical site codes
-  const siteCodes = uniq(SITES.map(s=> s && s.Site ? String(s.Site).trim().toUpperCase() : '')).filter(v=> /^[A-Z]{3}$/.test(v));
+  // Canonical site codes (updated from SITES data)
+  siteCodes = uniq(SITES.map(s=> s && s.Site ? String(s.Site).trim().toUpperCase() : '')).filter(v=> /^[A-Z]{3}$/.test(v));
   const inferSiteCode = (name)=>{
     const s = String(name||'').trim().toUpperCase();
     if(/^[A-Z]{3}$/.test(s)) return s;
@@ -1377,6 +1379,7 @@ tbody tr:hover{background:#EEF2FF}
   // Hook UI
   ["fType","fYear","fStatus","fBU"].forEach(id=>document.getElementById(id).addEventListener("change",()=>{ render(); }));
   const siteOptions = siteCodes.slice().sort();
+  logDiag('Populating site picker (main scope) with options:', siteOptions);
   document.getElementById("sitePick").innerHTML=`<option value="">Select a site</option>`+siteOptions.map(s=>`<option>${s}</option>`).join("");
   document.getElementById("sitePick").addEventListener("change",renderTasks);
 
