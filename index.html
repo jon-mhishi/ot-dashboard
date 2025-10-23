@@ -8,8 +8,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
-<!-- MSAL.js for Microsoft authentication -->
-<script src="https://alcdn.msauth.net/browser/2.38.3/js/msal-browser.min.js" onerror="console.error('Failed to load MSAL from CDN')"></script>
+<!-- MSAL.js for Microsoft authentication - removed due to CDN blocking -->
 
 
 
@@ -839,63 +838,64 @@ tbody tr:hover{background:#EEF2FF}
   }
 
   // ===== SharePoint Integration Functions =====
-  async function initializeMSAL() {
-    if (msalInstance) return msalInstance;
-    
-    // Wait for MSAL to load
-    let attempts = 0;
-    while (!window.msal && attempts < 50) {
-      await new Promise(resolve => setTimeout(resolve, 100));
-      attempts++;
-    }
-    
-    if (!window.msal) {
-      throw new Error('MSAL library failed to load. Please refresh the page and try again.');
-    }
-    
-    const msalConfig = {
-      auth: {
-        clientId: "00000003-0000-0000-c000-000000000000", // Microsoft Graph
-        authority: "https://login.microsoftonline.com/common",
-        redirectUri: window.location.origin
-      },
-      cache: {
-        cacheLocation: "sessionStorage",
-        storeAuthStateInCookie: false
-      }
-    };
-    
-    msalInstance = new window.msal.PublicClientApplication(msalConfig);
-    return msalInstance;
-  }
-
+  // Simple OAuth2 authentication without MSAL dependency
   async function authenticateWithSharePoint() {
     try {
-      await initializeMSAL();
-      const loginRequest = {
-        scopes: ["https://graph.microsoft.com/.default"],
-        prompt: "select_account"
-      };
+      const clientId = "00000003-0000-0000-c000-000000000000"; // Microsoft Graph
+      const redirectUri = window.location.origin;
+      const scope = "https://graph.microsoft.com/.default";
+      const authority = "https://login.microsoftonline.com/common/oauth2/v2.0/authorize";
       
-      const response = await msalInstance.loginPopup(loginRequest);
-      accessToken = response.accessToken;
-      logDiag('SharePoint authentication successful');
-      return true;
+      // Store the current state for when we return
+      const state = Math.random().toString(36).substring(2, 15);
+      sessionStorage.setItem('oauth_state', state);
+      sessionStorage.setItem('oauth_redirect', window.location.href);
+      
+      const authUrl = `${authority}?client_id=${clientId}&response_type=token&redirect_uri=${encodeURIComponent(redirectUri)}&scope=${encodeURIComponent(scope)}&response_mode=fragment&state=${state}`;
+      
+      // Redirect to Microsoft login
+      window.location.href = authUrl;
+      
     } catch (error) {
       logDiag('SharePoint authentication failed:', error);
       throw error;
     }
   }
 
-  // Simple authentication method - redirect to Microsoft login
-  async function authenticateWithSharePointSimple() {
+  // Check for OAuth2 callback and extract token
+  function checkOAuthCallback() {
     try {
-      // For now, just show instructions to the user
-      throw new Error('MSAL library failed to load. Please try refreshing the page, or contact your administrator for help with SharePoint authentication.');
+      const hash = window.location.hash;
+      if (hash && hash.includes('access_token=')) {
+        const params = new URLSearchParams(hash.substring(1));
+        const token = params.get('access_token');
+        const state = params.get('state');
+        const storedState = sessionStorage.getItem('oauth_state');
+        
+        if (token && state === storedState) {
+          accessToken = token;
+          sessionStorage.removeItem('oauth_state');
+          
+          // Show success message
+          const statusDiv = document.createElement('div');
+          statusDiv.className = 'status success';
+          statusDiv.textContent = 'Successfully signed in to SharePoint!';
+          document.getElementById('sharePointConfig').appendChild(statusDiv);
+          setTimeout(() => statusDiv.remove(), 3000);
+          
+          // Update UI
+          document.getElementById('btnAuth').textContent = 'Signed In';
+          document.getElementById('btnAuth').style.display = 'none';
+          document.getElementById('btnLoadSharePoint').style.display = 'inline-block';
+          
+          logDiag('OAuth2 authentication successful');
+          return true;
+        }
+      }
     } catch (error) {
-      logDiag('Simple SharePoint authentication failed:', error);
-      throw error;
+      logDiag('OAuth2 callback error:', error);
     }
+    return false;
   }
 
   async function getSharePointSiteId(siteUrl) {
@@ -1328,12 +1328,23 @@ tbody tr:hover{background:#EEF2FF}
   document.getElementById("sitePick").innerHTML=`<option value="">Select a site</option>`+siteOptions.map(s=>`<option>${s}</option>`).join("");
   document.getElementById("sitePick").addEventListener("change",renderTasks);
 
+  // Check for OAuth callback on page load
+  if (checkOAuthCallback()) {
+    // User just returned from authentication, show SharePoint mode
+    document.getElementById('dataSourceSharePoint').checked = true;
+    document.getElementById('sharePointConfig').style.display = 'block';
+    document.getElementById('btnAuth').style.display = 'none';
+    document.getElementById('btnLoadSharePoint').style.display = 'inline-block';
+    document.getElementById('btnManualAuth').style.display = 'inline-block';
+  }
+
   // SharePoint UI event listeners
   document.getElementById('dataSourceExcel').addEventListener('change', function() {
     if (this.checked) {
       document.getElementById('sharePointConfig').style.display = 'none';
       document.getElementById('btnAuth').style.display = 'none';
       document.getElementById('btnLoadSharePoint').style.display = 'none';
+      document.getElementById('btnManualAuth').style.display = 'none';
     }
   });
 
@@ -1349,64 +1360,9 @@ tbody tr:hover{background:#EEF2FF}
   document.getElementById('btnAuth').addEventListener('click', async function() {
     try {
       this.disabled = true;
-      this.textContent = 'Signing in...';
+      this.textContent = 'Redirecting to Microsoft...';
       
-      // Try multiple CDN sources for MSAL
-      const msalSources = [
-        'https://alcdn.msauth.net/browser/2.38.3/js/msal-browser.min.js',
-        'https://cdn.jsdelivr.net/npm/@azure/msal-browser@2.38.3/dist/msal-browser.min.js',
-        'https://unpkg.com/@azure/msal-browser@2.38.3/dist/msal-browser.min.js'
-      ];
-      
-      let msalLoaded = false;
-      
-      // Check if MSAL is already loaded
-      if (window.msal && window.msal.PublicClientApplication) {
-        msalLoaded = true;
-      } else {
-        // Try to load MSAL from different sources
-        for (const source of msalSources) {
-          try {
-            await new Promise((resolve, reject) => {
-              const script = document.createElement('script');
-              script.src = source;
-              script.onload = () => {
-                if (window.msal && window.msal.PublicClientApplication) {
-                  msalLoaded = true;
-                  resolve();
-                } else {
-                  reject(new Error('MSAL not available after loading'));
-                }
-              };
-              script.onerror = () => reject(new Error('Failed to load from ' + source));
-              document.head.appendChild(script);
-            });
-            break; // If successful, break out of the loop
-          } catch (e) {
-            console.log('Failed to load MSAL from', source, e.message);
-            continue; // Try next source
-          }
-        }
-      }
-      
-      if (!msalLoaded) {
-        // Try simple OAuth2 method as fallback
-        logDiag('MSAL not available, trying simple OAuth2 method');
-        await authenticateWithSharePointSimple();
-      } else {
-        await authenticateWithSharePoint();
-      }
-      
-      this.textContent = 'Signed In';
-      this.style.display = 'none';
-      document.getElementById('btnLoadSharePoint').style.display = 'inline-block';
-      
-      // Show success message
-      const statusDiv = document.createElement('div');
-      statusDiv.className = 'status success';
-      statusDiv.textContent = 'Successfully signed in to SharePoint!';
-      document.getElementById('sharePointConfig').appendChild(statusDiv);
-      setTimeout(() => statusDiv.remove(), 3000);
+      await authenticateWithSharePoint();
       
     } catch (error) {
       this.disabled = false;
@@ -1425,11 +1381,11 @@ tbody tr:hover{background:#EEF2FF}
     const statusDiv = document.createElement('div');
     statusDiv.className = 'status info';
     statusDiv.innerHTML = `
-      <strong>🔐 Manual Authentication Help</strong><br><br>
-      <strong>Option 1:</strong> Try refreshing the page and clicking "Sign In to SharePoint" again.<br><br>
-      <strong>Option 2:</strong> Check if your organization blocks certain CDN resources. Contact your IT administrator.<br><br>
-      <strong>Option 3:</strong> Try using a different browser or incognito/private mode.<br><br>
-      <strong>Option 4:</strong> The Microsoft Authentication Library may be temporarily unavailable. Try again later.
+      <strong>🔐 SharePoint Authentication Help</strong><br><br>
+      <strong>How it works:</strong> Click "Sign In to SharePoint" to redirect to Microsoft's login page.<br><br>
+      <strong>After login:</strong> You'll be redirected back to this dashboard with access to your SharePoint data.<br><br>
+      <strong>If it doesn't work:</strong> Check that your organization allows Microsoft Graph API access.<br><br>
+      <strong>Note:</strong> This method doesn't require any external libraries, so it should work even with strict security policies.
     `;
     document.getElementById('sharePointConfig').appendChild(statusDiv);
     setTimeout(() => statusDiv.remove(), 10000);
