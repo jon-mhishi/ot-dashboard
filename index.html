@@ -747,85 +747,19 @@ tbody tr:hover{background:#EEF2FF}
     })(0);
   }catch{}
 
-  // === Static snapshot (Azure Blob/JSON) support ===
-  // Defaults to ON (snapshots first). Disable with ?snapshots=0. Configure base with ?snapbase=<url or SAS>.
-  const USE_SNAPSHOTS = (urlParams.get('snapshots') !== '0');
-  const SNAP_BASE = ((urlParams.get('snapbase')||'').trim()).replace(/\/$/, '');
-  const SNAPSHOT_URLS = {
-    projects: urlParams.get('projectsUrl') || (SNAP_BASE? (SNAP_BASE + '/projects.json') : 'data/projects.json'),
-    tasks:    urlParams.get('tasksUrl')    || (SNAP_BASE? (SNAP_BASE + '/tasks.json')    : 'data/tasks.json'),
-    sites:    urlParams.get('sitesUrl')    || (SNAP_BASE? (SNAP_BASE + '/sites.json')    : 'data/sites.json')
-  };
-  async function fetchJson(u){ try{ if(!u) return null; const r=await fetch(u,{credentials:'omit', cache:'no-store'}); if(!r.ok) return null; return await r.json(); }catch{return null} }
-  let DATA_LOADED=false;
   let PROJECTS=[],TASKS=[],SITES=[];
-  if(USE_SNAPSHOTS){
-    next("Loading snapshots…");
-    try{
-      const [pj,tj,sj] = await Promise.all([
-        SNAPSHOT_URLS.projects? fetchJson(SNAPSHOT_URLS.projects): Promise.resolve(null),
-        SNAPSHOT_URLS.tasks?    fetchJson(SNAPSHOT_URLS.tasks)   : Promise.resolve(null),
-        SNAPSHOT_URLS.sites?    fetchJson(SNAPSHOT_URLS.sites)   : Promise.resolve(null)
-      ]);
-      if(Array.isArray(pj)){
-        PROJECTS = pj.map(b=>({
-          ...b,
-          BusinessUnit:b.BusinessUnit||b.BU||'',
-          Region:b.Region||b.region,
-          Country:b.Country||b.country,
-          Site:b.Site||b.site,
-          ProjectType:b.ProjectType||b.ProjectTyp||b.projectType,
-          Domain:b.Domain,
-          Category:b.Category,
-          Project:b.Project||b.Title,
-          BeforeState:b.BeforeState||b.BeforeStat,
-          AfterState:b.AfterState,
-          KeyBenefits:b.KeyBenefits||b.KeyBenefi,
-          Year:(isFinite(+b.Year) && String(b.Year).length<=4) ? Number(b.Year) : (String(b.Year||'').match(/^\d{4}$/) ? Number(b.Year) : ''),
-          Status:b.Status,
-          Owner:b.Owner,
-          Latitude:b.Latitude||b.lat||b.Lat,
-          Longitude:b.Longitude||b.lon||b.Lon||b.Lng
-        }));
-      }
-      if(Array.isArray(tj)){
-        TASKS = tj.map(b=>({
-          ...b,
-          BusinessUnit:b.BusinessUnit||b.BU||'',
-          Region:b.Region, Country:b.Country, Site:b.Site,
-          TaskId:b.TaskId||b.TaskID||b.id, TaskName:b.TaskName||b.Task||b.Project||b.Title||'',
-          TaskType:b.TaskType||b.Type||'',
-          Status:b.Status||'',
-          PlannedDate:b.PlannedDate||b.Planned,
-          CompletedDate:b.CompletedDate||b.Completed
-        })).map(normalizeTaskRow);
-      }
-      if(Array.isArray(sj)){
-        SITES = sj.map(b=>({
-          ...b,
-          BusinessUnit:b.BusinessUnit||b.BU||'',
-          Region:b.Region, Country:b.Country, Site:b.Site,
-          UsesNewOTNetworkIP: (b.UsesNewOTNetworkIP ?? b.NewOTNetworkIP ?? b.OTSubnet),
-          MonitoredSolarWindsOT: (b.MonitoredSolarWindsOT ?? b.SolarWinds),
-          MonitoredSinecNMSOT: (b.MonitoredSinecNMSOT ?? b.SINEC),
-          InOTvSphere: (b.InOTvSphere ?? b.OTvSphere),
-          LocalOTDomainController: (b.LocalOTDomainController ?? b.LocalOTDC),
-          OTSubnetCIDR: b.OTSubnetCIDR || b.OTSubnet,
-          EffectiveDate: b.EffectiveDate || b.Effective,
-          Latitude: b.Latitude ?? b.lat ?? b.Lat,
-          Longitude: b.Longitude ?? b.lon ?? b.Lon ?? b.Lng
-        }));
-      }
-      if(PROJECTS.length || TASKS.length || SITES.length){
-        DATA_LOADED=true;
-        logDiag('Snapshots loaded', {projects:PROJECTS.length, tasks:TASKS.length, sites:SITES.length, base:SNAP_BASE||'relative:data/'});
-      }
-    }catch(e){ logDiag('Snapshot load error', e && (e.message||String(e))); }
-  }
 
 
 
   const uniq=a=>[...new Set(a.filter(v=>v!==null&&v!==undefined&&v!==""))];
+
+  // Helper function to check if area path should be excluded
+  const shouldExcludeItem = (areaPath) => {
+    if (!areaPath) return false;
+    const excludePaths = document.getElementById('devOpsExcludePaths')?.value?.split(',').map(p => p.trim()).filter(Boolean) || ['BAU', 'BEA 2025 Continuous'];
+    const areaPathLower = areaPath.toLowerCase();
+    return excludePaths.some(excludePath => areaPathLower.includes(excludePath.toLowerCase()));
+  };
 
   // getBU — single definition
   const getBU = (r)=>{
@@ -936,14 +870,7 @@ tbody tr:hover{background:#EEF2FF}
       window.originalWorkItems = workItems;
       
       // Get exclude paths configuration
-      const excludePaths = document.getElementById('devOpsExcludePaths')?.value?.split(',').map(p => p.trim()).filter(Boolean) || ['BAU'];
-      
-      // Helper function to check if area path should be excluded
-      const shouldExcludeItem = (areaPath) => {
-        if (!areaPath) return false;
-        const areaPathLower = areaPath.toLowerCase();
-        return excludePaths.some(excludePath => areaPathLower.includes(excludePath.toLowerCase()));
-      };
+      const excludePaths = document.getElementById('devOpsExcludePaths')?.value?.split(',').map(p => p.trim()).filter(Boolean) || ['BAU', 'BEA 2025 Continuous'];
       
       // Process work items into our data structure
       const excludedProjects = workItems.filter(item => 
