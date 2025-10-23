@@ -117,7 +117,7 @@ window._spPageContextInfo = window._spPageContextInfo || (function(){
       <div class="form-group">
         <label class="form-label" for="devOpsToken">Personal Access Token:</label>
         <input type="password" id="devOpsToken" class="form-input" 
-               placeholder="Enter your Azure DevOps PAT">
+               placeholder="Enter your Azure DevOps PAT" value="8Bae4u0qdWcfbfey5pG07f0lVZPQn1jgAtKQumezBR63dzgTXtGkJQQJ99BJACAAAAAQzySRAAASAZDO4ePm">
       </div>
       <div class="form-group">
         <label class="form-label" for="devOpsQuery">Work Items Query (optional):</label>
@@ -964,7 +964,40 @@ tbody tr:hover{background:#EEF2FF}
 
   async function getDevOpsWorkItems(org, project, token, query) {
     try {
-      let url = `https://dev.azure.com/${org}/${project}/_apis/wit/wiql?api-version=7.0`;
+      // First, let's get the list of projects to find the correct project name
+      const projectsUrl = `https://dev.azure.com/${org}/_apis/projects?api-version=7.0`;
+      const projectsResponse = await fetch(projectsUrl, {
+        headers: {
+          'Authorization': `Basic ${btoa(':' + token)}`,
+          'Content-Type': 'application/json'
+        }
+      });
+      
+      if (!projectsResponse.ok) {
+        throw new Error(`Failed to get projects: ${projectsResponse.status} ${projectsResponse.statusText}`);
+      }
+      
+      const projectsData = await projectsResponse.json();
+      const projects = projectsData.value || [];
+      
+      logDiag('Available projects:', projects.map(p => p.name));
+      
+      // Find the project by name (case-insensitive)
+      const foundProject = projects.find(p => 
+        p.name.toLowerCase() === project.toLowerCase() || 
+        p.name.toLowerCase().includes('ot') ||
+        p.name.toLowerCase().includes('infrastructure')
+      );
+      
+      if (!foundProject) {
+        throw new Error(`Project "${project}" not found. Available projects: ${projects.map(p => p.name).join(', ')}`);
+      }
+      
+      const actualProjectName = foundProject.name;
+      logDiag('Using project:', actualProjectName);
+      
+      // Now get work items using the correct project name
+      let url = `https://dev.azure.com/${org}/${encodeURIComponent(actualProjectName)}/_apis/wit/wiql?api-version=7.0`;
       
       // If no specific query, get all work items
       const wiqlQuery = query || `
@@ -973,7 +1006,7 @@ tbody tr:hover{background:#EEF2FF}
                [System.Description], [Custom.Region], [Custom.SiteCode],
                [Microsoft.VSTS.Scheduling.StartDate], [Microsoft.VSTS.Common.ClosedDate]
         FROM WorkItems 
-        WHERE [System.TeamProject] = '${project}'
+        WHERE [System.TeamProject] = '${actualProjectName}'
         ORDER BY [System.ChangedDate] DESC
       `;
       
@@ -987,18 +1020,22 @@ tbody tr:hover{background:#EEF2FF}
       });
       
       if (!response.ok) {
-        throw new Error(`Azure DevOps API error: ${response.status} ${response.statusText}`);
+        const errorText = await response.text();
+        throw new Error(`Azure DevOps API error: ${response.status} ${response.statusText}. Details: ${errorText}`);
       }
       
       const queryResult = await response.json();
       
       if (!queryResult.workItems || queryResult.workItems.length === 0) {
+        logDiag('No work items found in project:', actualProjectName);
         return [];
       }
       
+      logDiag('Found work items:', queryResult.workItems.length);
+      
       // Get detailed work item data
       const workItemIds = queryResult.workItems.map(item => item.id);
-      const detailsUrl = `https://dev.azure.com/${org}/${project}/_apis/wit/workitems?ids=${workItemIds.join(',')}&api-version=7.0&$expand=all`;
+      const detailsUrl = `https://dev.azure.com/${org}/${encodeURIComponent(actualProjectName)}/_apis/wit/workitems?ids=${workItemIds.join(',')}&api-version=7.0&$expand=all`;
       
       const detailsResponse = await fetch(detailsUrl, {
         headers: {
