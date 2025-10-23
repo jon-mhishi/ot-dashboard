@@ -76,21 +76,13 @@ window._spPageContextInfo = window._spPageContextInfo || (function(){
     </div>
   </div>
 
-  <!-- Data Source Selection -->
+  <!-- Azure DevOps Configuration -->
   <div class="filters">
-    <label style="display:flex;align-items:center;gap:8px">
-      <input type="radio" name="dataSource" value="excel" id="dataSourceExcel" checked/>
-      <span>Excel Files</span>
-    </label>
-    <label style="display:flex;align-items:center;gap:8px">
-      <input type="radio" name="dataSource" value="devops" id="dataSourceDevOps"/>
-      <span>Azure DevOps (Real-time)</span>
-    </label>
-    <button id="btnLoadDevOps" class="btn primary" style="display:none">Load from Azure DevOps</button>
+    <button id="btnLoadDevOps" class="btn primary">Load from Azure DevOps</button>
   </div>
 
-  <!-- Azure DevOps Configuration (hidden by default) -->
-  <div id="devOpsConfig" class="config-section" style="display:none;">
+  <!-- Azure DevOps Configuration -->
+  <div id="devOpsConfig" class="config-section">
     <h3>Azure DevOps Configuration</h3>
     <div class="config-grid">
       <div class="form-group">
@@ -155,11 +147,6 @@ window._spPageContextInfo = window._spPageContextInfo || (function(){
 
   <h3>Tasks drill-down</h3>
   <div class="filters"><select id="sitePick" title="Site"></select></div>
-  <div class="filters">
-    <label style="display:flex;align-items:center;gap:8px"><input type="checkbox" id="plannerDemo"/> Include Planner demo tasks</label>
-    <input id="plannerPlanId" title="Planner Plan ID (future)" placeholder="Planner Plan ID (future)"/>
-    <label style="display:flex;align-items:center;gap:8px"><input type="checkbox" id="plannerSPO"/> Include Planner (SharePoint sync)</label>
-  </div>
   <div id="taskStatus" class="kpi small"></div>
   <div id="tasks" class="table-wrap"></div>
 </div>
@@ -657,8 +644,6 @@ tbody tr:hover{background:#EEF2FF}
   const siteUrl=_spPageContextInfo.webAbsoluteUrl;
   const urlParams = new URLSearchParams(location.search);
   const VERBOSE = urlParams.get('debug') === '1'; // quiet by default
-  const PLANNER_ENABLED = urlParams.get('planner') === '1';
-  const PLANNER_SPO_ENABLED = urlParams.get('plannerspo') === '1';
   
   // SharePoint integration variables
   let accessToken = null;
@@ -737,9 +722,6 @@ tbody tr:hover{background:#EEF2FF}
     tasks:    '/sites/GlobalOTInfrastructure/SiteAssets/ot/tasks.xlsx',
     sites:    '/sites/GlobalOTInfrastructure/SiteAssets/ot/sites_inventory.xlsx'
   };
-  const SPO_PLANNER_LIST = 'OT Planner Tasks';
-  // If known, prefer the exact list GUID to avoid any title/path/locale issues
-  const SPO_PLANNER_LIST_ID = '89a959e1-e862-4c9b-9d47-e7b5d1537ee9';
 
   // Logo
   try{
@@ -1359,85 +1341,15 @@ tbody tr:hover{background:#EEF2FF}
   }
 
 
-  if(!DATA_LOADED){
-  // Try to load Excel files, but don't fail if they don't exist
-  let consolidated = null;
-  try {
-    consolidated = await fetchConsolidated(['OTdev.xlsx','OT.xlsx','OT_Data.xlsx']);
-    logDiag('Consolidated workbook', {found: !!consolidated, rel: consolidated && consolidated.rel});
-  } catch(e) {
-    logDiag('Excel files not found, using SharePoint mode only', e.message);
-  }
-  
-  try{
-    const xl = DATA_LOADED? [] : (consolidated? consolidated.projects : await fetchXlsxName('projects.xlsx', FILE_PATHS.projects).catch(() => []));
-    if(!DATA_LOADED){ PROJECTS = (xl||[]).map(b=>({
-      ...b,
-      BusinessUnit:b.BusinessUnit||b.BU||'',
-      Region:b.Region||b.region,
-      Country:b.Country||b.country,
-      Site:b.Site||b.site,
-      ProjectType:b.ProjectType||b.ProjectTyp||b.projectType,
-      Domain:b.Domain,
-      Category:b.Category,
-      Project:b.Project||b.Title,
-      BeforeState:b.BeforeState||b.BeforeStat,
-      AfterState:b.AfterState,
-      KeyBenefits:b.KeyBenefits||b.KeyBenefi,
-      Year:(isFinite(+b.Year) && String(b.Year).length<=4) ? Number(b.Year) : (String(b.Year||'').match(/^\d{4}$/) ? Number(b.Year) : ''),
-      Status:b.Status,
-      Owner:b.Owner,
-      Latitude:b.Latitude||b.lat||b.Lat,
-      Longitude:b.Longitude||b.lon||b.Lon||b.Lng
-    })); }
-    next("Loading tasks…");
-  }catch(e){ 
-    logDiag('Projects load failed, continuing with empty data', (e&&e.message)||String(e)); 
-    PROJECTS = [];
-    next("Loading tasks…");
-  }
-
-  try{
-    const xl = DATA_LOADED? [] : (consolidated? consolidated.tasks : await fetchXlsxName('tasks.xlsx', FILE_PATHS.tasks).catch(() => []));
-    if(!DATA_LOADED){ TASKS = (xl||[]).map(b=>({
-      ...b,
-      BusinessUnit:b.BusinessUnit||b.BU||'',
-      Region:b.Region, Country:b.Country, Site:b.Site,
-      TaskId:b.TaskId||b.TaskID||b.id, TaskName:b.TaskName||b.Task||b.Project||b.Title||'',
-      TaskType:b.TaskType||b.Type||'',
-      Status:b.Status||'',
-      PlannedDate:b.PlannedDate||b.Planned,
-      CompletedDate:b.CompletedDate||b.Completed
-    })).map(normalizeTaskRow); }
-    next("Loading sites…");
-  }catch(e){ 
-    logDiag('Tasks load failed, continuing with empty data', (e&&e.message)||String(e)); 
-    TASKS = [];
-    next("Loading sites…");
-  }
-
-  try{
-    const xl = DATA_LOADED? [] : (consolidated? consolidated.sites : await fetchXlsxName('sites_inventory.xlsx', FILE_PATHS.sites).catch(() => []));
-    if(!DATA_LOADED){ SITES = (xl||[]).map(b=>({
-      ...b,
-      BusinessUnit:b.BusinessUnit||b.BU||'',
-      Region:b.Region, Country:b.Country, Site:b.Site,
-      UsesNewOTNetworkIP: toBool(b.UsesNewOTNetworkIP||b.NewOTNetworkIP||b.OTSubnet),
-      MonitoredSolarWindsOT: toBool(b.MonitoredSolarWindsOT||b.SolarWinds),
-      MonitoredSinecNMSOT: toBool(b.MonitoredSinecNMSOT||b.SINEC),
-      InOTvSphere: toBool(b.InOTvSphere||b.OTvSphere),
-      LocalOTDomainController: toBool(b.LocalOTDomainController||b.LocalOTDC),
-      OTSubnetCIDR: b.OTSubnetCIDR || b.OTSubnet,
-      EffectiveDate: b.EffectiveDate || b.Effective,
-      Latitude: b.Latitude ?? b.lat ?? b.Lat,
-      Longitude: b.Longitude ?? b.lon ?? b.Lon ?? b.Lng
-    })); }
-    next("Rendering…");
-  }catch(e){ 
-    logDiag('Sites load failed, continuing with empty data', (e&&e.message)||String(e)); 
-    SITES = [];
-    next("Rendering…");
-  }
+  // Prompt for DevOps credentials on load
+  const credentialsProvided = await promptForDevOpsCredentials();
+  if (credentialsProvided) {
+    // Auto-load data from Azure DevOps
+    try {
+      document.getElementById('btnLoadDevOps').click();
+    } catch (error) {
+      logDiag('Auto-load failed:', error);
+    }
   }
 
   // Column audit (after normalization)
@@ -1584,36 +1496,6 @@ tbody tr:hover{background:#EEF2FF}
   function renderTasks(){
     const sel=normSite(document.getElementById("sitePick").value);
     let rows = sel? TASKS.filter(t=> normSite(t.Site)===sel) : [];
-    try{
-      const demoOn = document.getElementById('plannerDemo') && document.getElementById('plannerDemo').checked;
-      const spoOn = (document.getElementById('plannerSPO') && document.getElementById('plannerSPO').checked) || PLANNER_SPO_ENABLED;
-      if(demoOn && sel){
-        // Mock Planner tasks for demo purposes
-        const mock=[
-          {TaskId:'PLN-'+sel+'-01', TaskName:'Planner: Site kickoff', TaskType:'Planner', Status:'In Progress', PlannedDate:'', CompletedDate:''},
-          {TaskId:'PLN-'+sel+'-02', TaskName:'Planner: Rack audit', TaskType:'Planner', Status:'Planned', PlannedDate:'', CompletedDate:''}
-        ];
-        rows = rows.concat(mock.map(m=> ({...m, Site: sel, __Source:'Planner'})));
-      }
-      // Real Planner rows (if loaded via ?planner=1)
-      if(window.OTPlannerTasksLoaded && Array.isArray(window.OTPlannerTasks)){
-        rows = rows.concat(window.OTPlannerTasks.map(m=> ({...m, Site: sel, __Source:'Planner'})));
-      }
-      // SharePoint list synced Planner rows
-      if(spoOn && window.OTPlannerSPO && Array.isArray(window.OTPlannerSPO)){
-        const add = window.OTPlannerSPO.filter(t=> !sel || normSite(t.SiteCode||t.Site||'')===sel)
-          .map(t=>({
-            TaskId: t.PlannerTaskId||t.Id||t.TaskId||'',
-            TaskName: t.Title||t.TaskName||'',
-            TaskType: t.Bucket||t.TaskType||'Planner',
-            Status: t.Status||'',
-            PlannedDate: t.StartDate||t.Planned||'',
-            CompletedDate: t.CompletedDate||t.Completed||'',
-            __Source: 'Planner'
-          }));
-        rows = rows.concat(add);
-      }
-    }catch{}
     // Normalize status case and common variants
     const normStatus=s=>{ const v=String(s||'').trim().toLowerCase();
       if(!v) return '';
@@ -1756,20 +1638,33 @@ tbody tr:hover{background:#EEF2FF}
   // Theme toggle event listener
   document.getElementById('themeToggle').addEventListener('click', toggleTheme);
 
-  // Data source UI event listeners
-  document.getElementById('dataSourceExcel').addEventListener('change', function() {
-    if (this.checked) {
-      document.getElementById('devOpsConfig').style.display = 'none';
-      document.getElementById('btnLoadDevOps').style.display = 'none';
+  // Prompt for DevOps credentials on load
+  async function promptForDevOpsCredentials() {
+    const org = prompt('🔐 Azure DevOps Organization:\n\nEnter your Azure DevOps organization name (e.g., "BungeDev"):');
+    if (!org) {
+      showErr('Organization name is required to load data from Azure DevOps.');
+      return false;
     }
-  });
-
-  document.getElementById('dataSourceDevOps').addEventListener('change', function() {
-    if (this.checked) {
-      document.getElementById('devOpsConfig').style.display = 'block';
-      document.getElementById('btnLoadDevOps').style.display = 'inline-block';
+    
+    const project = prompt('📁 Azure DevOps Project:\n\nEnter your project name (e.g., "OT Global Infrastructure"):');
+    if (!project) {
+      showErr('Project name is required to load data from Azure DevOps.');
+      return false;
     }
-  });
+    
+    const token = prompt(`🔑 Personal Access Token:\n\nTo get a Personal Access Token:\n1. Go to https://dev.azure.com/${org}/_usersSettings/tokens\n2. Click "New Token"\n3. Set scope to "Work Items (Read)"\n4. Copy the token and paste it below:\n\nToken:`);
+    if (!token) {
+      showErr('Personal Access Token is required to load data from Azure DevOps.');
+      return false;
+    }
+    
+    // Set the form values
+    document.getElementById('devOpsOrg').value = org;
+    document.getElementById('devOpsProject').value = project;
+    document.getElementById('devOpsToken').value = token;
+    
+    return true;
+  }
 
 
   document.getElementById('btnLoadDevOps').addEventListener('click', async function() {
@@ -1880,8 +1775,6 @@ tbody tr:hover{background:#EEF2FF}
       });
     }
   }catch(e){ logDiag('Map toggle setup error:', e); }
-  const chk=document.getElementById('plannerDemo'); if(chk){ chk.addEventListener('change', renderTasks); }
-  const chkSpo=document.getElementById('plannerSPO'); if(chkSpo){ chkSpo.addEventListener('change', async ()=>{ try{ if(chkSpo.checked && (!window.OTPlannerSPO || !Array.isArray(window.OTPlannerSPO))){ window.OTPlannerSPO = await fetchPlannerFromSPO(); } }catch{} renderTasks(); }); }
 
   render(); renderTasks();
 
@@ -1897,108 +1790,7 @@ tbody tr:hover{background:#EEF2FF}
   logDiag('Data loaded counts', {projects:PROJECTS.length, tasks:TASKS.length, sites:SITES.length});
   hideLoader();
 
-  // ===== Optional: Microsoft Planner (Graph) read-only integration (flagged by ?planner=1) =====
-  async function ensureMsal(){
-    try{ if(window.msal && window.msal.PublicClientApplication) return true; }catch{}
-    try{
-      await loadScript('https://alcdn.msauth.net/browser/2.38.0/js/msal-browser.min.js');
-      return !!(window.msal && window.msal.PublicClientApplication);
-    }catch(e){ logDiag('MSAL load failed', e && (e.message||String(e))); return false; }
-  }
-  async function getGraphToken(clientId, tenantId, scopes){
-    try{
-      const ok = await ensureMsal(); if(!ok) throw new Error('MSAL not available');
-      const authority = 'https://login.microsoftonline.com/' + (tenantId||'common');
-      const pca = new window.msal.PublicClientApplication({ auth:{ clientId, authority }, cache:{ cacheLocation:'sessionStorage' } });
-      try{ await pca.initialize(); }catch{}
-      let account = (pca.getAllAccounts()||[])[0];
-      if(!account){ const lr = await pca.loginPopup({ scopes: scopes||['User.Read'] }); account = lr.account; }
-      try{
-        const res = await pca.acquireTokenSilent({ account, scopes: scopes||['Tasks.Read','Group.Read.All','offline_access'] });
-        return res.accessToken;
-      }catch{
-        const res = await pca.acquireTokenPopup({ scopes: scopes||['Tasks.Read','Group.Read.All','offline_access'] });
-        return res.accessToken;
-      }
-    }catch(e){ logDiag('Graph token error', e && (e.message||String(e))); return null; }
-  }
-  async function graphGet(url, token){
-    try{ const r = await fetch(url, { headers:{ Authorization:'Bearer '+token } }); if(!r.ok) throw new Error('HTTP '+r.status); return await r.json(); }catch(e){ logDiag('Graph GET failed', {url, err:e && (e.message||String(e))}); return null; }
-  }
-  function derivePlannerStatus(t){ try{ if(t && (t.percentComplete===100 || t.completedDateTime)) return 'Completed'; return (t.startDateTime||t.dueDateTime)? 'In Progress' : 'Planned'; }catch{ return '' } }
-  async function loadPlannerTasks(planId, token){
-    const data = await graphGet('https://graph.microsoft.com/v1.0/planner/plans/'+encodeURIComponent(planId)+'/tasks', token);
-    const items = (data && data.value)||[];
-    const rows = items.map(t=>({
-      TaskId: t.id,
-      TaskName: t.title||'',
-      TaskType: 'Planner',
-      Status: derivePlannerStatus(t),
-      PlannedDate: t.startDateTime||'',
-      CompletedDate: t.completedDateTime||'',
-      __Source: 'Planner'
-    }));
-    return rows;
-  }
-  async function initPlannerFromParams(){
-    try{
-      const clientId = urlParams.get('msalClientId');
-      const tenantId = urlParams.get('msalTenantId') || (window._spPageContextInfo && _spPageContextInfo.tenantId) || '';
-      const planId = urlParams.get('plannerPlanId') || (document.getElementById('plannerPlanId') && document.getElementById('plannerPlanId').value) || '';
-      if(!clientId || !planId){ logDiag('Planner skipped (missing clientId or planId)'); return; }
-      const token = await getGraphToken(clientId, tenantId, ['Tasks.Read','Group.Read.All','offline_access']);
-      if(!token){ logDiag('Planner token not acquired'); return; }
-      const rows = await loadPlannerTasks(planId, token);
-      window.OTPlannerTasks = rows; window.OTPlannerTasksLoaded = true;
-      logDiag('Planner tasks loaded', {count: rows.length});
-    }catch(e){ logDiag('Planner init error', e && (e.message||String(e))); }
-  }
-  if(PLANNER_ENABLED){ try{ await initPlannerFromParams(); renderTasks(); }catch{} }
 
-  // ===== SharePoint list sync: fetch Planner tasks mirrored into SPO list =====
-  async function fetchPlannerFromSPO(){
-    try{
-      const base = _spPageContextInfo.webAbsoluteUrl.replace(/\/$/,'');
-      const webRel = _spPageContextInfo.webServerRelativeUrl.replace(/\/$/,'');
-      const title = SPO_PLANNER_LIST;
-
-      async function tryJson(u){
-        try{ const r=await fetch(u,{credentials:'same-origin', headers:{Accept:'application/json;odata=nometadata'}}); logDiag('SPO resolve try', {url:u, status:r.status}); if(!r.ok) return null; return await r.json(); }catch{return null}
-      }
-
-      // Resolve list ID robustly: prefer hard-coded GUID, else by Title or server-relative path
-      let listId=(SPO_PLANNER_LIST_ID && /[0-9a-fA-F-]{36}/.test(SPO_PLANNER_LIST_ID))? SPO_PLANNER_LIST_ID : null;
-      const listPath = `${webRel}/Lists/${title}`;
-      const candidates=listId? [] : [
-        `${base}/_api/web/lists/getByTitle('${encodeURIComponent(title)}')?$select=Id,Title`,
-        `${base}/_api/web/GetList(@list)?@list='${encodeURIComponent(listPath)}'&$select=Id,Title`,
-        `${base}/_api/web/lists?$select=Id,Title&$filter=Title eq '${String(title).replace(/'/g,"''")}'`
-      ];
-      for(const u of candidates){
-        const j = await tryJson(u);
-        const id = j && (j.Id || (j.value && j.value[0] && j.value[0].Id));
-        if(id){ listId=id; break; }
-      }
-
-      // Build items URL using GUID when available (avoids 404s from localized titles)
-      const itemsUrl = listId
-        ? `${base}/_api/web/lists(guid'${listId}')/items?$select=Id,Title,Status,Bucket,DueDate,StartDate,CompletedDate,PlannerTaskId,SiteCode&$orderby=Id%20desc`
-        : `${base}/_api/web/lists/getByTitle('${encodeURIComponent(title)}')/items?$select=Id,Title,Status,Bucket,DueDate,StartDate,CompletedDate,PlannerTaskId,SiteCode`;
-
-      const r = await fetch(itemsUrl,{ credentials:'same-origin', headers:{ Accept:'application/json;odata=nometadata' } });
-      logDiag('SPO planner items fetch', {url:itemsUrl, status:r && r.status});
-      if(!r.ok){ logDiag('SPO planner list fetch failed', {status:r.status}); return []; }
-      const j = await r.json();
-      return j && j.value ? j.value : [];
-    }catch(e){ logDiag('SPO planner list error', e && (e.message||String(e))); return []; }
-  }
-  try{
-    const spoCheckbox = document.getElementById('plannerSPO');
-    if(PLANNER_SPO_ENABLED || (spoCheckbox && spoCheckbox.checked)){
-      window.OTPlannerSPO = await fetchPlannerFromSPO();
-    }
-  }catch{}
-  renderTasks();
 
   // ===== Colorful map with robust coords (Leaflet) =====
   let mapRendered=false;
