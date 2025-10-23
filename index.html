@@ -135,7 +135,7 @@ window._spPageContextInfo = window._spPageContextInfo || (function(){
         <label class="form-label" for="devOpsExcludePaths">Exclude Area Paths (comma-separated):</label>
         <input type="text" id="devOpsExcludePaths" class="form-input" 
                placeholder="BAU,Maintenance,Support" 
-               value="BAU">
+               value="BAU,BEA 2025 Continuous">
       </div>
     </div>
     <div class="status info">
@@ -431,6 +431,21 @@ tbody tr:hover{background:#EEF2FF}
   --ring: rgba(59, 130, 246, 0.35);
 }
 
+/* Apply dark theme to the main app container */
+[data-theme="dark"] #otapp {
+  background: var(--bg) !important;
+  color: var(--text) !important;
+}
+
+[data-theme="dark"] body {
+  background: var(--bg) !important;
+  color: var(--text) !important;
+}
+
+[data-theme="dark"] html {
+  background: var(--bg) !important;
+}
+
 [data-theme="dark"] .brand {
   background: linear-gradient(180deg, rgba(59, 130, 246, 0.1), rgba(16, 185, 129, 0.08));
   border-color: var(--border);
@@ -558,6 +573,55 @@ tbody tr:hover{background:#EEF2FF}
   background: #7f1d1d;
   border-color: #991b1b;
   color: #fca5a5;
+}
+
+[data-theme="dark"] h1, 
+[data-theme="dark"] h2, 
+[data-theme="dark"] h3, 
+[data-theme="dark"] h4, 
+[data-theme="dark"] h5, 
+[data-theme="dark"] h6 {
+  color: var(--text) !important;
+}
+
+[data-theme="dark"] .loader {
+  background: var(--surface);
+  border-color: var(--border);
+}
+
+[data-theme="dark"] .loader-text {
+  color: var(--text);
+}
+
+[data-theme="dark"] .loader-bar {
+  background: var(--border);
+  border-color: var(--borderStrong);
+}
+
+[data-theme="dark"] .loader-bar span {
+  background: linear-gradient(90deg, var(--primary), var(--accent), var(--primary));
+}
+
+[data-theme="dark"] .meta {
+  color: var(--muted);
+}
+
+[data-theme="dark"] .helpMessage {
+  background: var(--surface);
+  border-color: var(--border);
+  color: var(--text);
+}
+
+[data-theme="dark"] .helpMessage strong {
+  color: var(--text);
+}
+
+[data-theme="dark"] .helpMessage a {
+  color: var(--primary);
+}
+
+[data-theme="dark"] .helpMessage a:hover {
+  color: var(--primary-600);
 }
 
 /* Theme Toggle Button */
@@ -1848,6 +1912,13 @@ Access Token:`);
   function initializeTheme() {
     const savedTheme = localStorage.getItem('ot-dashboard-theme') || 'light';
     document.documentElement.setAttribute('data-theme', savedTheme);
+    
+    // Also apply to the main app container
+    const otapp = document.getElementById('otapp');
+    if (otapp) {
+      otapp.setAttribute('data-theme', savedTheme);
+    }
+    
     updateThemeToggleIcon(savedTheme);
   }
 
@@ -1855,7 +1926,15 @@ Access Token:`);
     const currentTheme = document.documentElement.getAttribute('data-theme');
     const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
     
+    // Apply theme to document element
     document.documentElement.setAttribute('data-theme', newTheme);
+    
+    // Also apply to the main app container
+    const otapp = document.getElementById('otapp');
+    if (otapp) {
+      otapp.setAttribute('data-theme', newTheme);
+    }
+    
     localStorage.setItem('ot-dashboard-theme', newTheme);
     updateThemeToggleIcon(newTheme);
     
