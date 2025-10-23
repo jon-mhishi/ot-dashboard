@@ -861,17 +861,16 @@ tbody tr:hover{background:#EEF2FF}
       const org = document.getElementById('devOpsOrg').value;
       const project = document.getElementById('devOpsProject').value;
       const token = document.getElementById('devOpsToken').value;
-      const query = document.getElementById('devOpsQuery').value;
       
       if (!org || !project || !token) {
         throw new Error('Please fill in Organization, Project, and Personal Access Token');
       }
       
       next("Loading Azure DevOps data…");
-      logDiag('Loading data from Azure DevOps', {org, project, query: query || 'all work items'});
+      logDiag('Loading data from Azure DevOps', {org, project, query: 'all work items'});
       
       // Get work items from Azure DevOps
-      const workItems = await getDevOpsWorkItems(org, project, token, query);
+      const workItems = await getDevOpsWorkItems(org, project, token);
       
       // Store original work items for region filtering
       window.originalWorkItems = workItems;
@@ -977,7 +976,7 @@ tbody tr:hover{background:#EEF2FF}
     }
   }
 
-  async function getDevOpsWorkItems(org, project, token, query) {
+  async function getDevOpsWorkItems(org, project, token) {
     try {
       // First, let's get the list of projects to find the correct project name
       const projectsUrl = `https://dev.azure.com/${org}/_apis/projects?api-version=7.0`;
@@ -1014,8 +1013,8 @@ tbody tr:hover{background:#EEF2FF}
       // Now get work items using the correct project name
       let url = `https://dev.azure.com/${org}/${encodeURIComponent(actualProjectName)}/_apis/wit/wiql?api-version=7.0`;
       
-      // If no specific query, get all work items
-      const wiqlQuery = query || `
+      // Get all work items
+      const wiqlQuery = `
         SELECT [System.Id], [System.Title], [System.WorkItemType], [System.State], [System.AssignedTo], 
                [System.AreaPath], [System.IterationPath], [System.CreatedDate], [System.ChangedDate],
                [System.Description], [Custom.Region], [Custom.SiteCode],
