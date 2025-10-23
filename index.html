@@ -1638,29 +1638,17 @@ tbody tr:hover{background:#EEF2FF}
   // Theme toggle event listener
   document.getElementById('themeToggle').addEventListener('click', toggleTheme);
 
-  // Prompt for DevOps credentials on load
+  // Prompt for DevOps PAT on load
   async function promptForDevOpsCredentials() {
-    const org = prompt('🔐 Azure DevOps Organization:\n\nEnter your Azure DevOps organization name (e.g., "BungeDev"):');
-    if (!org) {
-      showErr('Organization name is required to load data from Azure DevOps.');
-      return false;
-    }
-    
-    const project = prompt('📁 Azure DevOps Project:\n\nEnter your project name (e.g., "OT Global Infrastructure"):');
-    if (!project) {
-      showErr('Project name is required to load data from Azure DevOps.');
-      return false;
-    }
-    
-    const token = prompt(`🔑 Personal Access Token:\n\nTo get a Personal Access Token:\n1. Go to https://dev.azure.com/${org}/_usersSettings/tokens\n2. Click "New Token"\n3. Set scope to "Work Items (Read)"\n4. Copy the token and paste it below:\n\nToken:`);
+    const token = prompt(`🔑 Personal Access Token Required:\n\nTo get a Personal Access Token:\n1. Go to https://dev.azure.com/BungeDev/_usersSettings/tokens\n2. Click "New Token"\n3. Set scope to "Work Items (Read)"\n4. Copy the token and paste it below:\n\nToken:`);
     if (!token) {
       showErr('Personal Access Token is required to load data from Azure DevOps.');
       return false;
     }
     
-    // Set the form values
-    document.getElementById('devOpsOrg').value = org;
-    document.getElementById('devOpsProject').value = project;
+    // Set the form values with known values
+    document.getElementById('devOpsOrg').value = 'BungeDev';
+    document.getElementById('devOpsProject').value = 'OT Global Infrastructure';
     document.getElementById('devOpsToken').value = token;
     
     return true;
