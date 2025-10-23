@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>OT Global Infrastructure Dashboard</title>
-    <!-- OT Dashboard (Excel + SharePoint, compact status, colorful map, robust coords) -->
+    <!-- OT Dashboard (Azure DevOps, compact status, colorful map, robust coords) -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
@@ -281,7 +281,7 @@ tbody tr:hover{background:#EEF2FF}
 #otapp[data-theme="looker"] .filters{border-color:var(--borderStrong)}
 </style>
 
-<!-- Additional styles for SharePoint configuration -->
+<!-- Additional styles for Azure DevOps configuration -->
 <style>
 .config-section {
   background: var(--surface);
@@ -645,10 +645,6 @@ tbody tr:hover{background:#EEF2FF}
   const urlParams = new URLSearchParams(location.search);
   const VERBOSE = urlParams.get('debug') === '1'; // quiet by default
   
-  // SharePoint integration variables
-  let accessToken = null;
-  let siteId = null;
-  let msalInstance = null;
   const IS_DEV = (function(){
     try{
       if(urlParams.get('dev')==='1') return true;
@@ -1344,12 +1340,67 @@ tbody tr:hover{background:#EEF2FF}
   // Prompt for DevOps credentials on load
   const credentialsProvided = await promptForDevOpsCredentials();
   if (credentialsProvided) {
-    // Auto-load data from Azure DevOps
-    try {
-      document.getElementById('btnLoadDevOps').click();
-    } catch (error) {
-      logDiag('Auto-load failed:', error);
-    }
+    // Auto-load data from Azure DevOps after a short delay to ensure page is ready
+    setTimeout(async () => {
+      try {
+        await loadDataFromDevOps();
+        
+        // Continue with existing rendering logic
+        next("Rendering…");
+        
+        // Update UI elements
+        const types=uniq(PROJECTS.map(p=>p.ProjectType)).sort();
+        const bus=uniq(SITES.map(getBU)).filter(v=>v && v!=='Other');
+        const years=uniq(PROJECTS.map(p=>p.Year)).sort((a,b)=>String(a).localeCompare(String(b)));
+        const statuses=uniq(PROJECTS.map(p=>p.Status||'')).sort();
+        const fill=(el,arr,lbl)=>el.innerHTML=`<option value="">All ${lbl||""}</option>`+arr.map(v=>`<option>${v}</option>`).join("");
+        // Always show all 3 regions, plus any additional ones found in data
+        const allRegions = [...new Set([...bus, 'BEA', 'BNA', 'BSA'])].sort();
+        fill(document.getElementById('fBU'), allRegions, 'Region');
+        fill(document.getElementById("fType"),types,"Types");
+        fill(document.getElementById("fYear"),years,"Years");
+        fill(document.getElementById("fStatus"),statuses,"Statuses");
+
+        // Update inventory KPIs
+        const countTrue=col=>SITES.filter(s=> s && toBool(s[col])===true).length;
+        const invDefs=[
+          {name:"New OT Network IP",col:"UsesNewOTNetworkIP"},
+          {name:"Monitored (SolarWinds OT)",col:"MonitoredSolarWindsOT"},
+          {name:"Monitored (SINEC OT)",col:"MonitoredSinecNMSOT"},
+          {name:"In OT vSphere",col:"InOTvSphere"},
+          {name:"Local OT Domain Controller",col:"LocalOTDomainController"}
+        ];
+        const invHtml=invDefs.map(k=>`<div class="card"><div class="label">${k.name}</div><div class="value">${countTrue(k.col)}</div></div>`).join("");
+        const buSel = document.getElementById('fBU').value;
+        if(!buSel){
+          const buCards = ['BEA','BNA','BSA'].map(b=>{
+            const nSites = SITES.filter(s=> getBU(s)===b).length || 0;
+            return `<div class="card bu ${b}"><div class="label">${b}</div><div class="value">${nSites}</div></div>`;
+          }).join('');
+          document.getElementById("kpiInventory").innerHTML = invHtml + `<div class="kpi bu-strip">${buCards}</div>`;
+        } else {
+          document.getElementById("kpiInventory").innerHTML = invHtml;
+        }
+
+        // Update site picker
+        const siteOptions = siteCodes.slice().sort();
+        document.getElementById("sitePick").innerHTML=`<option value="">Select a site</option>`+siteOptions.map(s=>`<option>${s}</option>`).join("");
+
+        // Render the dashboard
+        render(); 
+        renderTasks();
+        
+        // Update status
+        statusEl.textContent = `Loaded Projects: ${PROJECTS.length} • Tasks: ${TASKS.length} • Sites: ${SITES.length} (from Azure DevOps)`;
+        logDiag('Azure DevOps data loaded and rendered', {projects:PROJECTS.length, tasks:TASKS.length, sites:SITES.length});
+        hideLoader();
+        
+      } catch (error) {
+        showErr('Failed to load data from Azure DevOps: ' + error.message);
+        logDiag('Azure DevOps load error:', error);
+        hideLoader();
+      }
+    }, 500);
   }
 
   // Column audit (after normalization)
@@ -1768,12 +1819,10 @@ tbody tr:hover{background:#EEF2FF}
 
   // Compact final status (friendly line)
   if (PROJECTS.length === 0 && TASKS.length === 0 && SITES.length === 0) {
-    statusEl.textContent = `No data loaded. Please use SharePoint mode to load data from your corporate SharePoint.`;
+    statusEl.textContent = `No data loaded. Please enter your Azure DevOps Personal Access Token above to load data.`;
     statusEl.style.color = '#D97706';
-    document.getElementById('helpMessage').style.display = 'block';
   } else {
     statusEl.textContent = `Loaded Projects: ${PROJECTS.length} • Tasks: ${TASKS.length} • Sites: ${SITES.length}`;
-    document.getElementById('helpMessage').style.display = 'none';
   }
   logDiag('Data loaded counts', {projects:PROJECTS.length, tasks:TASKS.length, sites:SITES.length});
   hideLoader();
