@@ -60,8 +60,10 @@ window._spPageContextInfo = window._spPageContextInfo || (function(){
 <div id="otapp" data-inited="0" data-theme="looker">
   <div class="brand">
     <img id="brandLogo" alt="Bunge" class="logo"/>
-    <h1 style="color:#000">Global OT Infrastructure Improvements <span style="color:#DC2626">(under development)</span></h1>
-    <button id="themeToggle" class="theme-toggle" title="Toggle Dark Mode">🌙</button>
+    <h1 style="color:#000">Global OT Infrastructure Improvements <span style="color:#F59E0B">(under development)</span></h1>
+    <button id="themeToggle" class="theme-toggle" title="Toggle Dark Mode">
+      <span class="theme-icon">🌙</span>
+    </button>
   </div>
 
 
@@ -153,7 +155,10 @@ window._spPageContextInfo = window._spPageContextInfo || (function(){
   <div id="cards"></div>
 
   <h3>Tasks drill-down</h3>
-  <div class="filters"><select id="sitePick" title="Site"></select></div>
+  <div class="filters">
+    <select id="sitePick" title="Site"></select>
+    <select id="fTaskStatus" title="Task Status"></select>
+  </div>
   <div id="taskStatus" class="kpi small"></div>
   <div id="tasks" class="table-wrap"></div>
 </div>
@@ -403,6 +408,10 @@ tbody tr:hover{background:#EEF2FF}
   color: var(--text) !important;
 }
 
+[data-theme="dark"] .brand h1 span {
+  color: #F59E0B !important;
+}
+
 [data-theme="dark"] .theme-toggle {
   background: var(--surface);
   border: 1px solid var(--border);
@@ -609,34 +618,53 @@ tbody tr:hover{background:#EEF2FF}
   position: fixed;
   top: 20px;
   right: 20px;
-  width: 50px;
-  height: 50px;
-  border-radius: 50%;
-  border: 2px solid var(--border);
+  width: 48px;
+  height: 48px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
   background: var(--surface);
   color: var(--text);
-  font-size: 20px;
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: all 0.2s ease;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   z-index: 1000;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
 }
 
 .theme-toggle:hover {
   background: var(--primary);
   color: white;
-  transform: scale(1.1);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
+  border-color: var(--primary);
+}
+
+.theme-toggle:active {
+  transform: translateY(0);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+}
+
+.theme-icon {
+  font-size: 18px;
+  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.theme-toggle:hover .theme-icon {
+  transform: rotate(15deg) scale(1.1);
 }
 
 [data-theme="dark"] .theme-toggle {
-  content: "☀️";
+  background: linear-gradient(135deg, var(--surface) 0%, rgba(14, 165, 233, 0.1) 100%);
+  border-color: rgba(14, 165, 233, 0.3);
 }
 
 [data-theme="light"] .theme-toggle {
-  content: "🌙";
+  background: linear-gradient(135deg, var(--surface) 0%, rgba(251, 191, 36, 0.1) 100%);
+  border-color: rgba(251, 191, 36, 0.3);
 }
 </style>
 
@@ -1133,6 +1161,10 @@ tbody tr:hover{background:#EEF2FF}
         const siteOptions = siteCodes.slice().sort();
         logDiag('Populating site picker with options:', siteOptions);
         document.getElementById("sitePick").innerHTML=`<option value="">Select a site</option>`+siteOptions.map(s=>`<option>${s}</option>`).join("");
+        
+        // Update task status filter
+        const taskStatuses = uniq(TASKS.map(t=>t.Status||'')).sort();
+        fill(document.getElementById("fTaskStatus"), taskStatuses, "Task Status");
 
         // Render the dashboard
         render(); 
@@ -1298,7 +1330,9 @@ tbody tr:hover{background:#EEF2FF}
   function normSite(v){ const s=String(v||'').trim().toUpperCase(); const m=s.match(/[A-Z]{3}/); return m? m[0] : s; }
   function renderTasks(){
     const sel=normSite(document.getElementById("sitePick").value);
-    let rows = sel? TASKS.filter(t=> normSite(t.Site)===sel) : [];
+    const taskStatusFilter = document.getElementById("fTaskStatus").value;
+    let rows = sel? TASKS.filter(t=> normSite(t.Site)===sel) : TASKS.slice();
+    
     // Normalize status case and common variants
     const normStatus=s=>{ const v=String(s||'').trim().toLowerCase();
       if(!v) return '';
@@ -1317,6 +1351,14 @@ tbody tr:hover{background:#EEF2FF}
       if(p && String(p).trim()!=='') return 'Planned';
       return '';
     };
+    
+    // Apply task status filter if selected
+    if(taskStatusFilter) {
+      rows = rows.filter(t => {
+        const taskStatus = deriveStatus(t);
+        return taskStatus === taskStatusFilter;
+      });
+    }
     const rowsN = rows.map(r=>({ ...r, Status: deriveStatus(r)}));
     const buckets = { 'Planned':0, 'In Progress':0, 'Completed':0, 'Blocked':0 };
     rowsN.forEach(r=>{ if(buckets.hasOwnProperty(r.Status)) buckets[r.Status]++; });
@@ -1393,6 +1435,11 @@ tbody tr:hover{background:#EEF2FF}
   logDiag('Populating site picker (main scope) with options:', siteOptions);
   document.getElementById("sitePick").innerHTML=`<option value="">Select a site</option>`+siteOptions.map(s=>`<option>${s}</option>`).join("");
   document.getElementById("sitePick").addEventListener("change",renderTasks);
+  
+  // Update task status filter
+  const taskStatuses = uniq(TASKS.map(t=>t.Status||'')).sort();
+  fill(document.getElementById("fTaskStatus"), taskStatuses, "Task Status");
+  document.getElementById("fTaskStatus").addEventListener("change", renderTasks);
 
 
   // Theme toggle functionality
@@ -1430,8 +1477,9 @@ tbody tr:hover{background:#EEF2FF}
 
   function updateThemeToggleIcon(theme) {
     const toggle = document.getElementById('themeToggle');
-    if (toggle) {
-      toggle.textContent = theme === 'dark' ? '☀️' : '🌙';
+    const icon = toggle?.querySelector('.theme-icon');
+    if (toggle && icon) {
+      icon.textContent = theme === 'dark' ? '☀️' : '🌙';
       toggle.title = theme === 'dark' ? 'Switch to Light Mode' : 'Switch to Dark Mode';
     }
   }
@@ -1506,6 +1554,10 @@ tbody tr:hover{background:#EEF2FF}
       // Update site picker
       const siteOptions = siteCodes.slice().sort();
       document.getElementById("sitePick").innerHTML=`<option value="">Select a site</option>`+siteOptions.map(s=>`<option>${s}</option>`).join("");
+      
+      // Update task status filter
+      const taskStatuses = uniq(TASKS.map(t=>t.Status||'')).sort();
+      fill(document.getElementById("fTaskStatus"), taskStatuses, "Task Status");
 
       // Render the dashboard
       render(); 
