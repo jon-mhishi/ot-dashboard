@@ -850,9 +850,11 @@ please follow these steps:
 
 1. Go to: https://developer.microsoft.com/en-us/graph/graph-explorer
 2. Sign in with your corporate account
-3. Click "Access Token" in the top right
-4. Copy the access token
-5. Paste it below
+3. In "Modify permissions" tab, add Sites.Read.All permission
+4. Click "Consent" to grant the permission
+5. Click "Access Token" in the top right
+6. Copy the access token
+7. Paste it below
 
 Access Token:`);
 
@@ -860,8 +862,8 @@ Access Token:`);
         throw new Error('No access token provided');
       }
 
-      // Test the token by making a simple Graph API call
-      const testResponse = await fetch('https://graph.microsoft.com/v1.0/me', {
+      // Test the token by making a SharePoint-specific Graph API call
+      const testResponse = await fetch('https://graph.microsoft.com/v1.0/sites', {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
@@ -869,7 +871,11 @@ Access Token:`);
       });
 
       if (!testResponse.ok) {
-        throw new Error('Invalid access token. Please try again.');
+        if (testResponse.status === 401) {
+          throw new Error('Token lacks SharePoint permissions. Please ensure you granted Sites.Read.All permission in Graph Explorer.');
+        } else {
+          throw new Error(`Invalid access token (${testResponse.status}). Please try again.`);
+        }
       }
 
       accessToken = token;
@@ -1417,13 +1423,15 @@ Access Token:`);
       <strong>🔐 SharePoint Authentication Help</strong><br><br>
       <strong>Step 1:</strong> Go to <a href="https://developer.microsoft.com/en-us/graph/graph-explorer" target="_blank">Microsoft Graph Explorer</a><br><br>
       <strong>Step 2:</strong> Sign in with your corporate Microsoft account<br><br>
-      <strong>Step 3:</strong> Click "Access Token" in the top right corner<br><br>
-      <strong>Step 4:</strong> Copy the access token that appears<br><br>
-      <strong>Step 5:</strong> Click "Sign In to SharePoint" and paste the token when prompted<br><br>
-      <strong>Note:</strong> This method works around corporate security restrictions and doesn't require any special permissions.
+      <strong>Step 3:</strong> In the "Modify permissions" tab, add <strong>Sites.Read.All</strong> permission<br><br>
+      <strong>Step 4:</strong> Click "Consent" to grant the permission<br><br>
+      <strong>Step 5:</strong> Click "Access Token" in the top right corner<br><br>
+      <strong>Step 6:</strong> Copy the access token that appears<br><br>
+      <strong>Step 7:</strong> Click "Sign In to SharePoint" and paste the token when prompted<br><br>
+      <strong>Important:</strong> You must grant Sites.Read.All permission for SharePoint access!
     `;
     document.getElementById('sharePointConfig').appendChild(statusDiv);
-    setTimeout(() => statusDiv.remove(), 15000);
+    setTimeout(() => statusDiv.remove(), 20000);
   });
 
   document.getElementById('btnLoadSharePoint').addEventListener('click', async function() {
