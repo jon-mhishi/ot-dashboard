@@ -105,6 +105,7 @@ window._spPageContextInfo = window._spPageContextInfo || (function(){
       <div class="form-group">
         <label class="form-label" for="devOpsFields">Fields to Display:</label>
         <select id="devOpsFields" class="form-input" multiple size="6" style="height: 120px;">
+          <option value="Site" selected>Site</option>
           <option value="TaskId" selected>Task ID</option>
           <option value="TaskName" selected>Task Name</option>
           <option value="TaskType" selected>Task Type</option>
@@ -1366,6 +1367,7 @@ tbody tr:hover{background:#EEF2FF}
     document.getElementById("taskStatus").innerHTML=counts.map(c=>`<div class="card"><div class="label">${c.st}</div><div class="value">${c.n}</div></div>`).join("");
     if(!rowsN.length){ document.getElementById("tasks").innerHTML=""; return; }
     const baseCols=[
+      {key:"Site", label:"Site", get:(r)=> r.Site||""},
       {key:"TaskId", label:"TaskId", get:(r)=> r.TaskId||r.TaskID||r.id||""},
       {key:"TaskName", label:"TaskName", get:(r)=> r.TaskName||r.Task||r.Project||r.Title||""},
       {key:"TaskType", label:"TaskType", get:(r)=> r.TaskType||r.Type||r.Category||r.Domain||""},
@@ -1377,7 +1379,7 @@ tbody tr:hover{background:#EEF2FF}
     const configuredFields = Array.from(document.getElementById('devOpsFields')?.selectedOptions || [])
       .map(option => option.value).filter(Boolean);
     
-    const skipKeys = new Set(["BusinessUnit","Region","Country","Site","Project","Description"]);
+    const skipKeys = new Set(["BusinessUnit","Region","Country","Project","Description"]);
     let extraKeys = [];
     
     if (configuredFields.length > 0) {
