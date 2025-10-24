@@ -1367,12 +1367,7 @@ tbody tr:hover{background:#EEF2FF}
         <div class="top"><span><b>[${r.ProjectType||""}] ${r.Project||r.Title||""}</b> — ${locationName} <span class="bu bu-${bu}">${bu}</span></span>
           <span class="pill ${pill}">${r.Status||""}</span></div>
         <div class="meta">
-          <div><b>ID:</b> ${r.id||""}</div>
-          <div><b>Description:</b> ${(r.Description||"").substring(0, 100)}${(r.Description||"").length > 100 ? "..." : ""}</div>
-          <div><b>Area Path:</b> ${r.AreaPath||""}</div>
-          <div><b>Iteration:</b> ${r.IterationPath||""}</div>
-          <div><b>Completed:</b> ${formatDate(r.CompletedDate||r.Completed)||"Not completed"}</div>
-          <div><b>Coordinates:</b> ${coords}</div>
+          <div><b>ID:</b> ${r.id||""} <b>Description:</b> ${(r.Description||"").substring(0, 100)}${(r.Description||"").length > 100 ? "..." : ""} <b>Area Path:</b> ${r.AreaPath||""} <b>Iteration:</b> ${r.IterationPath||""} <b>Completed:</b> ${formatDate(r.CompletedDate||r.Completed)||"Not completed"} <b>Coordinates:</b> ${coords}</div>
         </div>
         <div class="grid">
           <div class="box before"><b>Before</b><div>${(r.BeforeState||"").replace(/\n/g,"<br>")}</div></div>
@@ -1384,6 +1379,75 @@ tbody tr:hover{background:#EEF2FF}
 
     // CSV export disabled for launch (can be re-enabled later)
     document.getElementById("btnExport").style.display='none';
+    
+    // Map rendering
+    if (document.getElementById("map").style.display !== "none") {
+      if (!mapRendered) {
+        const mapEl = document.getElementById("map");
+        if (mapEl) {
+          try {
+            map = L.map("map").setView([20, 0], 2);
+            L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+              attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+            }).addTo(map);
+            mapRendered = true;
+            logDiag('Map initialized successfully');
+          } catch (error) {
+            logDiag('Leaflet map initialization failed:', error);
+            mapEl.innerHTML = '<div style="padding: 20px; text-align: center; color: #666;">Map failed to load. Please refresh the page.</div>';
+          }
+        }
+      }
+      
+      if (map) {
+        // Clear existing markers
+        map.eachLayer(layer => {
+          if (layer instanceof L.Marker) {
+            map.removeLayer(layer);
+          }
+        });
+        
+        // Add markers for projects with coordinates
+        const projectsWithCoords = rows.filter(p => p.Latitude && p.Longitude && !isNaN(p.Latitude) && !isNaN(p.Longitude));
+        logDiag('Projects with coordinates for map:', projectsWithCoords.length, projectsWithCoords);
+        
+        if (projectsWithCoords.length === 0) {
+          logDiag('No projects with valid coordinates found. Available projects:', rows.map(p => ({
+            title: p.Project || p.Title,
+            site: p.Site,
+            lat: p.Latitude,
+            lon: p.Longitude
+          })));
+        }
+        
+        projectsWithCoords.forEach(project => {
+          const marker = L.marker([parseFloat(project.Latitude), parseFloat(project.Longitude)])
+            .addTo(map)
+            .bindPopup(`
+              <div style="min-width: 200px;">
+                <h4>${project.Project || project.Title || 'Unknown Project'}</h4>
+                <p><strong>Status:</strong> ${project.Status || 'Unknown'}</p>
+                <p><strong>Site:</strong> ${project.Site || 'Unknown'}</p>
+                <p><strong>Business Unit:</strong> ${project.BusinessUnit || 'Unknown'}</p>
+                <p><strong>Coordinates:</strong> ${project.Latitude}, ${project.Longitude}</p>
+                ${project.Description ? `<p><strong>Description:</strong> ${project.Description.substring(0, 100)}${project.Description.length > 100 ? '...' : ''}</p>` : ''}
+              </div>
+            `);
+        });
+        
+        // Fit map to show all markers
+        if (projectsWithCoords.length > 0) {
+          const group = new L.featureGroup(projectsWithCoords.map(p => L.marker([parseFloat(p.Latitude), parseFloat(p.Longitude)])));
+          map.fitBounds(group.getBounds().pad(0.1));
+          logDiag('Map bounds set to show all markers');
+        } else {
+          logDiag('No markers to display on map');
+        }
+        
+        // Invalidate size to ensure proper rendering
+        setTimeout(() => map.invalidateSize(), 100);
+      }
+    }
   }
 
   function normSite(v){ const s=String(v||'').trim().toUpperCase(); const m=s.match(/[A-Z]{3}/); return m? m[0] : s; }
