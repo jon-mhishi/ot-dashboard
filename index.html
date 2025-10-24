@@ -127,6 +127,12 @@ window._spPageContextInfo = window._spPageContextInfo || (function(){
                placeholder="BAU,Maintenance,Support" 
                value="BAU,BEA 2025 Continuous">
       </div>
+      <div class="form-group">
+        <label class="form-label" for="siteCoordinates">Site Coordinates (JSON):</label>
+        <textarea id="siteCoordinates" class="form-input" rows="8" 
+                  placeholder='{"Barcelona": {"lat": 41.35913, "lon": 2.1689, "name": "Barcelona, Spain"}, "Escombreras": {"lat": 37.56719, "lon": -0.95152, "name": "Escombreras, Spain"}}'>{"Barcelona": {"lat": 41.35913, "lon": 2.1689, "name": "Barcelona, Spain"}, "Escombreras": {"lat": 37.56719, "lon": -0.95152, "name": "Escombreras (Cartagena), Murcia, Spain"}, "Bilbao": {"lat": 43.26301, "lon": -2.93499, "name": "Bilbao / Zierbena (Bizkaia), Spain"}, "Bruck": {"lat": 48.0167, "lon": 16.7667, "name": "Bruck an der Leitha, Austria"}, "Mannheim": {"lat": 49.488888, "lon": 8.469167, "name": "Mannheim, Germany"}, "Izmir": {"lat": 38.423733, "lon": 27.142826, "name": "Izmir (Aliağa), Turkey"}}</textarea>
+        <small style="color: #666; font-size: 12px;">Enter site coordinates as JSON. Format: {"SiteCode": {"lat": latitude, "lon": longitude, "name": "Location Name"}}</small>
+      </div>
     </div>
   </div>
 
@@ -979,6 +985,18 @@ tbody tr:hover{background:#EEF2FF}
         Year: extractYear(item.fields['System.IterationPath'] || '')
       })).map(normalizeTaskRow);
       
+      // Load site coordinates from configuration
+      let siteCoordinates = {};
+      try {
+        const coordsText = document.getElementById('siteCoordinates')?.value?.trim();
+        if (coordsText) {
+          siteCoordinates = JSON.parse(coordsText);
+          logDiag('Loaded site coordinates:', siteCoordinates);
+        }
+      } catch (error) {
+        logDiag('Error parsing site coordinates:', error);
+      }
+
       // For sites, we'll create a summary from the work items
       SITES = [];
       siteCodes = [...new Set(workItems.map(item => item.fields['Custom.SiteCode']).filter(Boolean))]
@@ -986,14 +1004,16 @@ tbody tr:hover{background:#EEF2FF}
       logDiag('Extracted site codes from Azure DevOps (excluding BEA/BNA/BSA):', siteCodes);
       siteCodes.forEach(siteCode => {
         const siteItems = workItems.filter(item => item.fields['Custom.SiteCode'] === siteCode);
+        const coords = siteCoordinates[siteCode] || {};
         SITES.push({
           Site: siteCode,
           Region: siteItems[0]?.fields['Custom.Region'] || '',
           BusinessUnit: extractBusinessUnit(siteItems[0]?.fields['System.AreaPath'] || ''),
           ProjectCount: siteItems.filter(item => ['Project', 'Program'].includes(item.fields['System.WorkItemType'])).length,
           TaskCount: siteItems.filter(item => ['Task', 'Bug', 'Issue', 'Requirement'].includes(item.fields['System.WorkItemType'])).length,
-          Latitude: null, // Not available in DevOps
-          Longitude: null // Not available in DevOps
+          Latitude: coords.lat || null,
+          Longitude: coords.lon || null,
+          LocationName: coords.name || siteCode
         });
       });
       
@@ -1308,19 +1328,23 @@ tbody tr:hover{background:#EEF2FF}
     document.getElementById("cards").innerHTML=rows.map(r=>{
       const pill=r.Status==="Completed"?"done":(r.Status==="In Progress"?"prog":"other");
       const bu = getBU(r);
-      const preferred=["BusinessUnit","Region","Country","Site","ProjectType","Domain","Category","Project","BeforeState","AfterState","KeyBenefits","Year","Status","Owner"];
-      const extras=Object.keys(r).filter(k=>!preferred.includes(k) && r[k]!==undefined && r[k]!=='' && k!=="__proto__");
-      const extrasHtml=extras.length?`<div class="meta">`+extras.map(k=>`<span style="margin-right:10px"><b>${k}:</b> ${r[k]}</span>`).join("")+`</div>`:"";
+      
+      // Find site coordinates for this project's site
+      const siteData = SITES.find(s => s.Site === r.Site);
+      const coords = siteData ? `${siteData.Latitude}, ${siteData.Longitude}` : "Not set";
+      const locationName = siteData?.LocationName || r.Site;
+      
       return `<div class="row">
-        <div class="top"><span><b>[${r.ProjectType||""}] ${r.Project||r.Title||""}</b> — ${r.Site||""} <span class="bu bu-${bu}">${bu}</span></span>
+        <div class="top"><span><b>[${r.ProjectType||""}] ${r.Project||r.Title||""}</b> — ${locationName} <span class="bu bu-${bu}">${bu}</span></span>
           <span class="pill ${pill}">${r.Status||""}</span></div>
-        <div class="meta">${r.Region||""} • ${r.Country||""} • ${r.Year||""}</div>
-        <div class="grid">
-          <div class="box before"><b>Before</b><div>${(r.BeforeState||"").replace(/\n/g,"<br>")}</div></div>
-          <div class="box after"><b>After</b><div>${(r.AfterState||"").replace(/\n/g,"<br>")}</div></div>
+        <div class="meta">
+          <div><b>ID:</b> ${r.id||""}</div>
+          <div><b>Description:</b> ${(r.Description||"").substring(0, 100)}${(r.Description||"").length > 100 ? "..." : ""}</div>
+          <div><b>Area Path:</b> ${r.AreaPath||""}</div>
+          <div><b>Iteration:</b> ${r.IterationPath||""}</div>
+          <div><b>Completed:</b> ${formatDate(r.CompletedDate||r.Completed)||"Not completed"}</div>
+          <div><b>Coordinates:</b> ${coords}</div>
         </div>
-        ${r.KeyBenefits?`<div style="margin-top:6px">Benefits: ${r.KeyBenefits}</div>`:""}
-        ${extrasHtml}
       </div>`;
     }).join("");
 
