@@ -996,6 +996,33 @@ tbody tr:hover{background:#EEF2FF}
       } catch (error) {
         logDiag('Error parsing site coordinates:', error);
       }
+      
+      // Helper function to find coordinates for a site code
+      const findSiteCoordinates = (siteCode) => {
+        if (!siteCode) return null;
+        
+        // Try exact match first
+        if (siteCoordinates[siteCode]) {
+          return siteCoordinates[siteCode];
+        }
+        
+        // Try case-insensitive match
+        const lowerSiteCode = siteCode.toLowerCase();
+        for (const [key, coords] of Object.entries(siteCoordinates)) {
+          if (key.toLowerCase() === lowerSiteCode) {
+            return coords;
+          }
+        }
+        
+        // Try partial match (e.g., "Barcelona" matches "Barcelona, Spain")
+        for (const [key, coords] of Object.entries(siteCoordinates)) {
+          if (key.toLowerCase().includes(lowerSiteCode) || lowerSiteCode.includes(key.toLowerCase())) {
+            return coords;
+          }
+        }
+        
+        return null;
+      };
 
       // For sites, we'll create a summary from the work items
       SITES = [];
@@ -1004,16 +1031,17 @@ tbody tr:hover{background:#EEF2FF}
       logDiag('Extracted site codes from Azure DevOps (excluding BEA/BNA/BSA):', siteCodes);
       siteCodes.forEach(siteCode => {
         const siteItems = workItems.filter(item => item.fields['Custom.SiteCode'] === siteCode);
-        const coords = siteCoordinates[siteCode] || {};
+        const coords = findSiteCoordinates(siteCode);
+        logDiag(`Site: ${siteCode}, Found coordinates:`, coords);
         SITES.push({
           Site: siteCode,
           Region: siteItems[0]?.fields['Custom.Region'] || '',
           BusinessUnit: extractBusinessUnit(siteItems[0]?.fields['System.AreaPath'] || ''),
           ProjectCount: siteItems.filter(item => ['Project', 'Program'].includes(item.fields['System.WorkItemType'])).length,
           TaskCount: siteItems.filter(item => ['Task', 'Bug', 'Issue', 'Requirement'].includes(item.fields['System.WorkItemType'])).length,
-          Latitude: coords.lat || null,
-          Longitude: coords.lon || null,
-          LocationName: coords.name || siteCode
+          Latitude: coords?.lat || null,
+          Longitude: coords?.lon || null,
+          LocationName: coords?.name || siteCode
         });
       });
       
@@ -1346,6 +1374,11 @@ tbody tr:hover{background:#EEF2FF}
           <div><b>Completed:</b> ${formatDate(r.CompletedDate||r.Completed)||"Not completed"}</div>
           <div><b>Coordinates:</b> ${coords}</div>
         </div>
+        <div class="grid">
+          <div class="box before"><b>Before</b><div>${(r.BeforeState||"").replace(/\n/g,"<br>")}</div></div>
+          <div class="box after"><b>After</b><div>${(r.AfterState||"").replace(/\n/g,"<br>")}</div></div>
+        </div>
+        ${r.KeyBenefits?`<div style="margin-top:6px">Benefits: ${r.KeyBenefits}</div>`:""}
       </div>`;
     }).join("");
 
