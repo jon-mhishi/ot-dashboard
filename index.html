@@ -131,6 +131,9 @@ window._spPageContextInfo = window._spPageContextInfo || (function(){
         <label class="form-label" for="siteCoordinates">Site Coordinates (JSON):</label>
         <textarea id="siteCoordinates" class="form-input" rows="8" 
                   placeholder='{"Barcelona": {"lat": 41.35913, "lon": 2.1689, "name": "Barcelona, Spain"}, "Escombreras": {"lat": 37.56719, "lon": -0.95152, "name": "Escombreras, Spain"}}'>{"Barcelona": {"lat": 41.35913, "lon": 2.1689, "name": "Barcelona, Spain"}, "Escombreras": {"lat": 37.56719, "lon": -0.95152, "name": "Escombreras (Cartagena), Murcia, Spain"}, "Bilbao": {"lat": 43.26301, "lon": -2.93499, "name": "Bilbao / Zierbena (Bizkaia), Spain"}, "Bruck": {"lat": 48.0167, "lon": 16.7667, "name": "Bruck an der Leitha, Austria"}, "Mannheim": {"lat": 49.488888, "lon": 8.469167, "name": "Mannheim, Germany"}, "Izmir": {"lat": 38.423733, "lon": 27.142826, "name": "Izmir (Aliağa), Turkey"}}</textarea>
+        <div style="margin-top: 8px; font-size: 12px; color: #666;">
+          <strong>Debug:</strong> <span id="coordsDebug">Click "Load Data" to see coordinate matching</span>
+        </div>
         <small style="color: #666; font-size: 12px;">Enter site coordinates as JSON. Format: {"SiteCode": {"lat": latitude, "lon": longitude, "name": "Location Name"}}</small>
       </div>
     </div>
@@ -989,9 +992,13 @@ tbody tr:hover{background:#EEF2FF}
       let siteCoordinates = {};
       try {
         const coordsText = document.getElementById('siteCoordinates')?.value?.trim();
+        logDiag('Raw site coordinates text:', coordsText);
         if (coordsText) {
           siteCoordinates = JSON.parse(coordsText);
-          logDiag('Loaded site coordinates:', siteCoordinates);
+          logDiag('Parsed site coordinates:', siteCoordinates);
+          logDiag('Site coordinates keys:', Object.keys(siteCoordinates));
+        } else {
+          logDiag('No site coordinates text found in textarea');
         }
       } catch (error) {
         logDiag('Error parsing site coordinates:', error);
@@ -999,10 +1006,17 @@ tbody tr:hover{background:#EEF2FF}
       
       // Helper function to find coordinates for a site code
       const findSiteCoordinates = (siteCode) => {
-        if (!siteCode) return null;
+        if (!siteCode) {
+          logDiag('findSiteCoordinates: No site code provided');
+          return null;
+        }
+        
+        logDiag(`findSiteCoordinates: Looking for site code "${siteCode}"`);
+        logDiag('Available site coordinate keys:', Object.keys(siteCoordinates));
         
         // Try exact match first
         if (siteCoordinates[siteCode]) {
+          logDiag(`findSiteCoordinates: Exact match found for "${siteCode}":`, siteCoordinates[siteCode]);
           return siteCoordinates[siteCode];
         }
         
@@ -1010,6 +1024,7 @@ tbody tr:hover{background:#EEF2FF}
         const lowerSiteCode = siteCode.toLowerCase();
         for (const [key, coords] of Object.entries(siteCoordinates)) {
           if (key.toLowerCase() === lowerSiteCode) {
+            logDiag(`findSiteCoordinates: Case-insensitive match found for "${siteCode}" -> "${key}":`, coords);
             return coords;
           }
         }
@@ -1017,16 +1032,20 @@ tbody tr:hover{background:#EEF2FF}
         // Try partial match (e.g., "Barcelona" matches "Barcelona, Spain")
         for (const [key, coords] of Object.entries(siteCoordinates)) {
           if (key.toLowerCase().includes(lowerSiteCode) || lowerSiteCode.includes(key.toLowerCase())) {
+            logDiag(`findSiteCoordinates: Partial match found for "${siteCode}" -> "${key}":`, coords);
             return coords;
           }
         }
         
+        logDiag(`findSiteCoordinates: No match found for "${siteCode}"`);
         return null;
       };
 
       // For sites, we'll create a summary from the work items
       SITES = [];
-      siteCodes = [...new Set(workItems.map(item => item.fields['Custom.SiteCode']).filter(Boolean))]
+      const allSiteCodes = workItems.map(item => item.fields['Custom.SiteCode']).filter(Boolean);
+      logDiag('All site codes from Azure DevOps work items:', allSiteCodes);
+      siteCodes = [...new Set(allSiteCodes)]
         .filter(code => !['BEA', 'BNA', 'BSA'].includes(code.toUpperCase()));
       logDiag('Extracted site codes from Azure DevOps (excluding BEA/BNA/BSA):', siteCodes);
       siteCodes.forEach(siteCode => {
@@ -1046,6 +1065,16 @@ tbody tr:hover{background:#EEF2FF}
       });
       
       logDiag('Azure DevOps data loaded', {projects: PROJECTS.length, tasks: TASKS.length, sites: SITES.length});
+      logDiag('SITES array:', SITES);
+      logDiag('Site codes extracted:', siteCodes);
+      
+      // Update debug display
+      const debugEl = document.getElementById('coordsDebug');
+      if (debugEl) {
+        const sitesWithCoords = SITES.filter(s => s.Latitude && s.Longitude);
+        debugEl.innerHTML = `Found ${sitesWithCoords.length} sites with coordinates out of ${SITES.length} total sites. Site codes: ${siteCodes.join(', ')}`;
+      }
+      
       return true;
     } catch (error) {
       logDiag('Failed to load Azure DevOps data:', error);
@@ -1359,9 +1388,11 @@ tbody tr:hover{background:#EEF2FF}
       
       // Find site coordinates for this project's site
       const siteData = SITES.find(s => s.Site === r.Site);
+      logDiag(`Project ${r.Project || r.Title}: Site=${r.Site}, Found siteData:`, siteData);
       const coords = (siteData && siteData.Latitude && siteData.Longitude) ? 
         `${siteData.Latitude}, ${siteData.Longitude}` : "Not set";
       const locationName = siteData?.LocationName || r.Site;
+      logDiag(`Project ${r.Project || r.Title}: coords=${coords}, locationName=${locationName}`);
       
       return `<div class="row">
         <div class="top"><span><b>[${r.ProjectType||""}] ${r.Project||r.Title||""}</b> — ${locationName} <span class="bu bu-${bu}">${bu}</span></span>
