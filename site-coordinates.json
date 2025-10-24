@@ -1,0 +1,8 @@
+{
+  "Barcelona": {"lat": 41.35913, "lon": 2.1689, "name": "Barcelona, Spain"},
+  "Escombreras": {"lat": 37.56719, "lon": -0.95152, "name": "Escombreras (Cartagena), Murcia, Spain"},
+  "Bilbao": {"lat": 43.26301, "lon": -2.93499, "name": "Bilbao / Zierbena (Bizkaia), Spain"},
+  "Bruck": {"lat": 48.0167, "lon": 16.7667, "name": "Bruck an der Leitha, Austria"},
+  "Mannheim": {"lat": 49.488888, "lon": 8.469167, "name": "Mannheim, Germany"},
+  "Izmir": {"lat": 38.423733, "lon": 27.142826, "name": "Izmir (Aliağa), Turkey"}
+}
