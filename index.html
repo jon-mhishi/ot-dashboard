@@ -130,7 +130,7 @@ window._spPageContextInfo = window._spPageContextInfo || (function(){
       <div class="form-group">
         <label class="form-label" for="siteCoordinates">Site Coordinates (JSON):</label>
         <textarea id="siteCoordinates" class="form-input" rows="8" 
-                  placeholder='{"Barcelona": {"lat": 41.35913, "lon": 2.1689, "name": "Barcelona, Spain"}, "Escombreras": {"lat": 37.56719, "lon": -0.95152, "name": "Escombreras, Spain"}}'>{"Barcelona": {"lat": 41.35913, "lon": 2.1689, "name": "Barcelona, Spain"}, "Escombreras": {"lat": 37.56719, "lon": -0.95152, "name": "Escombreras (Cartagena), Murcia, Spain"}, "Bilbao": {"lat": 43.26301, "lon": -2.93499, "name": "Bilbao / Zierbena (Bizkaia), Spain"}, "Bruck": {"lat": 48.0167, "lon": 16.7667, "name": "Bruck an der Leitha, Austria"}, "Mannheim": {"lat": 49.488888, "lon": 8.469167, "name": "Mannheim, Germany"}, "Izmir": {"lat": 38.423733, "lon": 27.142826, "name": "Izmir (Aliağa), Turkey"}}</textarea>
+                  placeholder='{"Barcelona": {"lat": 41.35913, "lon": 2.1689, "name": "Barcelona, Spain"}, "Escombreras": {"lat": 37.56719, "lon": -0.95152, "name": "Escombreras, Spain"}}'>{"Barcelona": {"lat": 41.35913, "lon": 2.1689, "name": "Barcelona, Spain"}, "Escombreras": {"lat": 37.56719, "lon": -0.95152, "name": "Escombreras (Cartagena), Murcia, Spain"}, "Bilbao": {"lat": 43.26301, "lon": -2.93499, "name": "Bilbao / Zierbena (Bizkaia), Spain"}, "Bruck": {"lat": 48.0167, "lon": 16.7667, "name": "Bruck an der Leitha, Austria"}, "Mannheim": {"lat": 49.488888, "lon": 8.469167, "name": "Mannheim, Germany"}, "Izmir": {"lat": 38.423733, "lon": 27.142826, "name": "Izmir (Aliağa), Turkey"}, "ESC": {"lat": 37.56719, "lon": -0.95152, "name": "Escombreras (Cartagena), Murcia, Spain"}, "BIO": {"lat": 43.26301, "lon": -2.93499, "name": "Bilbao / Zierbena (Bizkaia), Spain"}, "BAR": {"lat": 41.35913, "lon": 2.1689, "name": "Barcelona, Spain"}, "BRU": {"lat": 48.0167, "lon": 16.7667, "name": "Bruck an der Leitha, Austria"}, "MAN": {"lat": 49.488888, "lon": 8.469167, "name": "Mannheim, Germany"}, "IZM": {"lat": 38.423733, "lon": 27.142826, "name": "Izmir (Aliağa), Turkey"}}</textarea>
         <div style="margin-top: 8px; font-size: 12px; color: #666;">
           <strong>Debug:</strong> <span id="coordsDebug">Click "Load Data" to see coordinate matching</span>
         </div>
@@ -930,10 +930,26 @@ tbody tr:hover{background:#EEF2FF}
         })));
       }
       
-      PROJECTS = workItems.filter(item => 
-        ['Project', 'Epic'].includes(item.fields['System.WorkItemType']) &&
-        !shouldExcludeItem(item.fields['System.AreaPath'])
-      ).map(item => ({
+      PROJECTS = workItems.filter(item => {
+        const isProjectType = ['Project', 'Epic'].includes(item.fields['System.WorkItemType']);
+        const isNotExcluded = !shouldExcludeItem(item.fields['System.AreaPath']);
+        const title = item.fields['System.Title'] || '';
+        const areaPath = item.fields['System.AreaPath'] || '';
+        
+        // Debug specific project
+        if (title.toLowerCase().includes('gsp') || areaPath.toLowerCase().includes('gsp')) {
+          logDiag(`GSP Project Debug:`, {
+            title: title,
+            workItemType: item.fields['System.WorkItemType'],
+            areaPath: areaPath,
+            isProjectType: isProjectType,
+            isNotExcluded: isNotExcluded,
+            shouldExclude: shouldExcludeItem(areaPath)
+          });
+        }
+        
+        return isProjectType && isNotExcluded;
+      }).map(item => ({
         id: item.id,
         Project: item.fields['System.Title'],
         Status: item.fields['System.State'],
@@ -1031,8 +1047,16 @@ tbody tr:hover{background:#EEF2FF}
         
         // Try partial match (e.g., "Barcelona" matches "Barcelona, Spain")
         for (const [key, coords] of Object.entries(siteCoordinates)) {
-          if (key.toLowerCase().includes(lowerSiteCode) || lowerSiteCode.includes(key.toLowerCase())) {
+          const lowerKey = key.toLowerCase();
+          // Check if site code is contained in the key or vice versa
+          if (lowerKey.includes(lowerSiteCode) || lowerSiteCode.includes(lowerKey)) {
             logDiag(`findSiteCoordinates: Partial match found for "${siteCode}" -> "${key}":`, coords);
+            return coords;
+          }
+          // Also try matching the first word of the key (e.g., "Barcelona" matches "Barcelona, Spain")
+          const firstWord = lowerKey.split(/[,\s]+/)[0];
+          if (firstWord === lowerSiteCode || lowerSiteCode === firstWord) {
+            logDiag(`findSiteCoordinates: First word match found for "${siteCode}" -> "${key}":`, coords);
             return coords;
           }
         }
@@ -1067,6 +1091,23 @@ tbody tr:hover{background:#EEF2FF}
       logDiag('Azure DevOps data loaded', {projects: PROJECTS.length, tasks: TASKS.length, sites: SITES.length});
       logDiag('SITES array:', SITES);
       logDiag('Site codes extracted:', siteCodes);
+      
+      // Debug work item types
+      const workItemTypes = [...new Set(workItems.map(item => item.fields['System.WorkItemType']))];
+      logDiag('All work item types found:', workItemTypes);
+      
+      // Debug GSP-related items
+      const gspItems = workItems.filter(item => 
+        (item.fields['System.Title'] || '').toLowerCase().includes('gsp') ||
+        (item.fields['System.AreaPath'] || '').toLowerCase().includes('gsp')
+      );
+      logDiag('GSP-related work items:', gspItems.map(item => ({
+        id: item.id,
+        title: item.fields['System.Title'],
+        workItemType: item.fields['System.WorkItemType'],
+        areaPath: item.fields['System.AreaPath'],
+        state: item.fields['System.State']
+      })));
       
       // Update debug display
       const debugEl = document.getElementById('coordsDebug');
@@ -1398,7 +1439,8 @@ tbody tr:hover{background:#EEF2FF}
         <div class="top"><span><b>[${r.ProjectType||""}] ${r.Project||r.Title||""}</b> — ${locationName} <span class="bu bu-${bu}">${bu}</span></span>
           <span class="pill ${pill}">${r.Status||""}</span></div>
         <div class="meta">
-          <div><b>ID:</b> ${r.id||""} <b>Description:</b> ${(r.Description||"").substring(0, 100)}${(r.Description||"").length > 100 ? "..." : ""} <b>Area Path:</b> ${r.AreaPath||""} <b>Iteration:</b> ${r.IterationPath||""} <b>Completed:</b> ${formatDate(r.CompletedDate||r.Completed)||"Not completed"} <b>Coordinates:</b> ${coords}</div>
+          <div><b>ID:</b> ${r.id||""} <b>Area Path:</b> ${r.AreaPath||""} <b>Iteration:</b> ${r.IterationPath||""} <b>Completed:</b> ${formatDate(r.CompletedDate||r.Completed)||"Not completed"} <b>Coordinates:</b> ${coords}</div>
+          <div><b>Description:</b> ${(r.Description||"").substring(0, 200)}${(r.Description||"").length > 200 ? "..." : ""}</div>
         </div>
         <div class="grid">
           <div class="box before"><b>Before</b><div>${(r.BeforeState||"").replace(/\n/g,"<br>")}</div></div>
