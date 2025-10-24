@@ -1331,7 +1331,8 @@ tbody tr:hover{background:#EEF2FF}
       
       // Find site coordinates for this project's site
       const siteData = SITES.find(s => s.Site === r.Site);
-      const coords = siteData ? `${siteData.Latitude}, ${siteData.Longitude}` : "Not set";
+      const coords = (siteData && siteData.Latitude && siteData.Longitude) ? 
+        `${siteData.Latitude}, ${siteData.Longitude}` : "Not set";
       const locationName = siteData?.LocationName || r.Site;
       
       return `<div class="row">
