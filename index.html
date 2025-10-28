@@ -923,7 +923,10 @@ tbody tr:hover{background:#EEF2FF}
           row[header.toLowerCase()] = values[idx];
         });
         
-        console.log(`🔍 Parsed row ${i}:`, row);
+        if (i <= 3) {
+          console.log(`🔍 Parsed row ${i}:`, row);
+          console.log(`🔍 Row ${i} usesnewotnetworkip value:`, row.usesnewotnetworkip, 'Type:', typeof row.usesnewotnetworkip);
+        }
         
         // Extract site code
         const site = row.site || '';
@@ -941,27 +944,46 @@ tbody tr:hover{background:#EEF2FF}
           lon = parseFloat(row.longitude);
         }
         
-        inventory[site.toUpperCase()] = {
+        const parseBool = (val) => {
+          if (!val || val === '') return false;
+          const str = String(val).toLowerCase().trim();
+          return str === 'true' || str === '1' || str === 'yes' || str === 'y';
+        };
+        
+        const siteData = {
           site: site.toUpperCase(),
           region: row.region || '',
           bu: row.bu || '',
           country: row.country || '',
           latitude: lat,
           longitude: lon,
-          usesNewOTNetwork: row.usesnewotnetworkip && row.usesnewotnetworkip.toLowerCase() === 'true',
-          monitoredSolarWinds: row.monitoredsolarwindsot && row.monitoredsolarwindsot.toLowerCase() === 'true',
-          monitoredSinecNMS: row.monitoredsinecnmsot && row.monitoredsinecnmsot.toLowerCase() === 'true',
-          inOTvSphere: row.inotvsphere && row.inotvsphere.toLowerCase() === 'true',
-          localOTDomainController: row.localotdomaincontrolle && row.localotdomaincontrolle.toLowerCase() === 'true',
-          otSubnetCID: row.otsubnetcid && row.otsubnetcid.toLowerCase() === 'true'
+          usesNewOTNetwork: parseBool(row.usesnewotnetworkip),
+          monitoredSolarWinds: parseBool(row.monitoredsolarwindsot),
+          monitoredSinecNMS: parseBool(row.monitoredsinecnmsot),
+          inOTvSphere: parseBool(row.inotvsphere),
+          localOTDomainController: parseBool(row.localotdomaincontrolle),
+          otSubnetCID: parseBool(row.otsubnetcid)
         };
+        
+        if (i <= 3) {
+          console.log(`🔍 Site ${site.toUpperCase()} parsed booleans:`, {
+            usesNewOTNetwork: siteData.usesNewOTNetwork,
+            inOTvSphere: siteData.inOTvSphere,
+            monitoredSolarWinds: siteData.monitoredSolarWinds
+          });
+        }
+        
+        inventory[site.toUpperCase()] = siteData;
       }
       
       logDiag('Site inventory loaded from CSV', {sites: Object.keys(inventory).length});
       console.log('✅ Final inventory object:', inventory);
       console.log('✅ Inventory sites:', Object.keys(inventory));
       if (Object.keys(inventory).length > 0) {
-        console.log('✅ First site details:', inventory[Object.keys(inventory)[0]]);
+        const firstSite = inventory[Object.keys(inventory)[0]];
+        console.log('✅ First site details:', firstSite);
+        console.log('✅ First site UsesNewOTNetwork:', firstSite.usesNewOTNetwork, typeof firstSite.usesNewOTNetwork);
+        console.log('✅ First site InOTvSphere:', firstSite.inOTvSphere, typeof firstSite.inOTvSphere);
       }
       return inventory;
     } catch (error) {
