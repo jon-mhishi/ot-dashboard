@@ -907,21 +907,30 @@ tbody tr:hover{background:#EEF2FF}
       
       // Parse headers
       const headers = lines[0].split(',').map(h => h.trim().replace(/^"|"$/g, ''));
+      console.log('🔍 CSV Headers:', headers);
       const inventory = {};
       
       // Parse data rows
       for (let i = 1; i < lines.length; i++) {
         const values = lines[i].split(',').map(v => v.trim().replace(/^"|"$/g, ''));
-        if (values.length < headers.length) continue;
+        if (values.length < headers.length) {
+          console.log(`⚠️ Row ${i} skipped: not enough columns`, {valuesCount: values.length, headersCount: headers.length});
+          continue;
+        }
         
         const row = {};
         headers.forEach((header, idx) => {
           row[header.toLowerCase()] = values[idx];
         });
         
+        console.log(`🔍 Parsed row ${i}:`, row);
+        
         // Extract site code
         const site = row.site || '';
-        if (!site) continue;
+        if (!site) {
+          console.log(`⚠️ Row ${i} skipped: no site code`);
+          continue;
+        }
         
         // Parse coordinates if available
         let lat = null, lon = null;
@@ -949,6 +958,11 @@ tbody tr:hover{background:#EEF2FF}
       }
       
       logDiag('Site inventory loaded from CSV', {sites: Object.keys(inventory).length});
+      console.log('✅ Final inventory object:', inventory);
+      console.log('✅ Inventory sites:', Object.keys(inventory));
+      if (Object.keys(inventory).length > 0) {
+        console.log('✅ First site details:', inventory[Object.keys(inventory)[0]]);
+      }
       return inventory;
     } catch (error) {
       logDiag('Error loading site inventory CSV:', error);
@@ -1152,9 +1166,9 @@ tbody tr:hover{background:#EEF2FF}
           Latitude: invData?.latitude || coords?.lat || null,
           Longitude: invData?.longitude || coords?.lon || null,
           LocationName: invData?.country ? `${invData.country} (${siteCode})` : (coords?.name || siteCode),
-          UsesNewOTNetwork: invData?.usesNewOTNetwork || false,
-          MonitoredSolarWinds: invData?.monitoredSolarWinds || false,
-          MonitoredSinecNMS: invData?.monitoredSinecNMS || false,
+          UsesNewOTNetworkIP: invData?.usesNewOTNetwork || false,
+          MonitoredSolarWindsOT: invData?.monitoredSolarWinds || false,
+          MonitoredSinecNMSOT: invData?.monitoredSinecNMS || false,
           InOTvSphere: invData?.inOTvSphere || false,
           LocalOTDomainController: invData?.localOTDomainController || false,
           OTSubnetCID: invData?.otSubnetCID || false
@@ -1176,9 +1190,9 @@ tbody tr:hover{background:#EEF2FF}
               Latitude: invData.latitude || null,
               Longitude: invData.longitude || null,
               LocationName: invData.country ? `${invData.country} (${siteCode})` : siteCode,
-              UsesNewOTNetwork: invData.usesNewOTNetwork || false,
-              MonitoredSolarWinds: invData.monitoredSolarWinds || false,
-              MonitoredSinecNMS: invData.monitoredSinecNMS || false,
+              UsesNewOTNetworkIP: invData.usesNewOTNetwork || false,
+              MonitoredSolarWindsOT: invData.monitoredSolarWinds || false,
+              MonitoredSinecNMSOT: invData.monitoredSinecNMS || false,
               InOTvSphere: invData.inOTvSphere || false,
               LocalOTDomainController: invData.localOTDomainController || false,
               OTSubnetCID: invData.otSubnetCID || false
@@ -1190,6 +1204,10 @@ tbody tr:hover{background:#EEF2FF}
       logDiag('Azure DevOps data loaded', {projects: PROJECTS.length, tasks: TASKS.length, sites: SITES.length});
       logDiag('SITES array:', SITES);
       logDiag('Site codes extracted:', siteCodes);
+      logDiag('Inventory data loaded:', inventory);
+      console.log('🔍 DEBUG: Inventory data', inventory);
+      console.log('🔍 DEBUG: First site from inventory:', inventory ? Object.values(inventory)[0] : 'No inventory');
+      console.log('🔍 DEBUG: SITES array', SITES);
       
       // Debug work item types
       const workItemTypes = [...new Set(workItems.map(item => item.fields['System.WorkItemType']))];
