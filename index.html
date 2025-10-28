@@ -923,17 +923,10 @@ tbody tr:hover{background:#EEF2FF}
           row[header.toLowerCase()] = values[idx];
         });
         
-        if (i <= 3) {
-          console.log(`🔍 Parsed row ${i}:`, row);
-          console.log(`🔍 Row ${i} usesnewotnetworkip value:`, row.usesnewotnetworkip, 'Type:', typeof row.usesnewotnetworkip);
-        }
         
         // Extract site code
         const site = row.site || '';
-        if (!site) {
-          console.log(`⚠️ Row ${i} skipped: no site code`);
-          continue;
-        }
+        if (!site) continue;
         
         // Parse coordinates if available
         let lat = null, lon = null;
@@ -961,30 +954,14 @@ tbody tr:hover{background:#EEF2FF}
           monitoredSolarWinds: parseBool(row.monitoredsolarwindsot),
           monitoredSinecNMS: parseBool(row.monitoredsinecnmsot),
           inOTvSphere: parseBool(row.inotvsphere),
-          localOTDomainController: parseBool(row.localotdomaincontrolle),
+          localOTDomainController: parseBool(row.localotdomaincontroller),
           otSubnetCID: parseBool(row.otsubnetcid)
         };
-        
-        if (i <= 3) {
-          console.log(`🔍 Site ${site.toUpperCase()} parsed booleans:`, {
-            usesNewOTNetwork: siteData.usesNewOTNetwork,
-            inOTvSphere: siteData.inOTvSphere,
-            monitoredSolarWinds: siteData.monitoredSolarWinds
-          });
-        }
         
         inventory[site.toUpperCase()] = siteData;
       }
       
       logDiag('Site inventory loaded from CSV', {sites: Object.keys(inventory).length});
-      console.log('✅ Final inventory object:', inventory);
-      console.log('✅ Inventory sites:', Object.keys(inventory));
-      if (Object.keys(inventory).length > 0) {
-        const firstSite = inventory[Object.keys(inventory)[0]];
-        console.log('✅ First site details:', firstSite);
-        console.log('✅ First site UsesNewOTNetwork:', firstSite.usesNewOTNetwork, typeof firstSite.usesNewOTNetwork);
-        console.log('✅ First site InOTvSphere:', firstSite.inOTvSphere, typeof firstSite.inOTvSphere);
-      }
       return inventory;
     } catch (error) {
       logDiag('Error loading site inventory CSV:', error);
