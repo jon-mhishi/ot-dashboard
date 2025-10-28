@@ -1381,39 +1381,8 @@ tbody tr:hover{background:#EEF2FF}
         // Continue with existing rendering logic
         next("Rendering…");
         
-        // Update UI elements
-        const types=uniq(PROJECTS.map(p=>p.ProjectType)).sort();
-        const bus=uniq(SITES.map(getBU)).filter(v=>v && v!=='Other');
-        const years=uniq(PROJECTS.map(p=>p.Year)).sort((a,b)=>String(a).localeCompare(String(b)));
-        const statuses=uniq(PROJECTS.map(p=>p.Status||'')).sort();
-        const fill=(el,arr,lbl)=>el.innerHTML=`<option value="">All ${lbl||""}</option>`+arr.map(v=>`<option>${v}</option>`).join("");
-        // Always show all 3 regions, plus any additional ones found in data
-        const allRegions = [...new Set([...bus, 'BEA', 'BNA', 'BSA'])].sort();
-        fill(document.getElementById('fBU'), allRegions, 'Region');
-        fill(document.getElementById("fType"),types,"Types");
-        fill(document.getElementById("fYear"),years,"Years");
-        fill(document.getElementById("fStatus"),statuses,"Statuses");
-
-        // Update inventory KPIs
-        const countTrue=col=>SITES.filter(s=> s && toBool(s[col])===true).length;
-        const invDefs=[
-          {name:"New OT Network IP",col:"UsesNewOTNetworkIP"},
-          {name:"Monitored (SolarWinds OT)",col:"MonitoredSolarWindsOT"},
-          {name:"Monitored (SINEC OT)",col:"MonitoredSinecNMSOT"},
-          {name:"In OT vSphere",col:"InOTvSphere"},
-          {name:"Local OT Domain Controller",col:"LocalOTDomainController"}
-        ];
-        const invHtml=invDefs.map(k=>`<div class="card"><div class="label">${k.name}</div><div class="value">${countTrue(k.col)}</div></div>`).join("");
-        const buSel = document.getElementById('fBU').value;
-        if(!buSel){
-          const buCards = ['BEA','BNA','BSA'].map(b=>{
-            const nSites = SITES.filter(s=> getBU(s)===b).length || 0;
-            return `<div class="card bu ${b}"><div class="label">${b}</div><div class="value">${nSites}</div></div>`;
-          }).join('');
-          document.getElementById("kpiInventory").innerHTML = invHtml + `<div class="kpi bu-strip">${buCards}</div>`;
-        } else {
-          document.getElementById("kpiInventory").innerHTML = invHtml;
-        }
+        // Update UI elements and KPIs
+        updateUIAndKPIs();
 
         // Update site picker
         const siteOptions = siteCodes.slice().sort();
@@ -1489,17 +1458,19 @@ tbody tr:hover{background:#EEF2FF}
   TASKS.forEach(t=>{ const c=inferSiteCode(t.Site); if(c) t.Site=c; });
   PROJECTS.forEach(p=>{ const c=inferSiteCode(p.Site); if(c) p.Site=c; });
 
-  // UI + KPIs
-  const types=uniq(PROJECTS.map(p=>p.ProjectType)).sort();
-  // BU list derived from SITES to ensure coverage even if projects are missing in a BU
-  const bus=uniq(SITES.map(getBU)).filter(v=>v && v!=='Other');
-  const years=uniq(PROJECTS.map(p=>p.Year)).sort((a,b)=>String(a).localeCompare(String(b)));
-  const statuses=uniq(PROJECTS.map(p=>p.Status||'')).sort();
-  const fill=(el,arr,lbl)=>el.innerHTML=`<option value="">All ${lbl||""}</option>`+arr.map(v=>`<option>${v}</option>`).join("");
-  fill(document.getElementById('fBU'), (bus.length?bus:['BEA','BNA','BSA']).sort(), 'Region');
-  fill(document.getElementById("fType"),types,"Types");
-  fill(document.getElementById("fYear"),years,"Years");
-  fill(document.getElementById("fStatus"),statuses,"Statuses");
+  // Function to update UI and KPIs after data is loaded
+  function updateUIAndKPIs(){
+    // UI + KPIs
+    const types=uniq(PROJECTS.map(p=>p.ProjectType)).sort();
+    // BU list derived from SITES to ensure coverage even if projects are missing in a BU
+    const bus=uniq(SITES.map(getBU)).filter(v=>v && v!=='Other');
+    const years=uniq(PROJECTS.map(p=>p.Year)).sort((a,b)=>String(a).localeCompare(String(b)));
+    const statuses=uniq(PROJECTS.map(p=>p.Status||'')).sort();
+    const fill=(el,arr,lbl)=>el.innerHTML=`<option value="">All ${lbl||""}</option>`+arr.map(v=>`<option>${v}</option>`).join("");
+    fill(document.getElementById('fBU'), (bus.length?bus:['BEA','BNA','BSA']).sort(), 'Region');
+    fill(document.getElementById("fType"),types,"Types");
+    fill(document.getElementById("fYear"),years,"Years");
+    fill(document.getElementById("fStatus"),statuses,"Statuses");
 
   const countTrue=col=>SITES.filter(s=> s && toBool(s[col])===true).length;
   // Inventory KPIs
@@ -1532,6 +1503,7 @@ tbody tr:hover{background:#EEF2FF}
     document.getElementById("kpiInventory").innerHTML = invHtml + `<div class="kpi bu-strip">${buCards}</div>`;
   } else {
     document.getElementById("kpiInventory").innerHTML = invHtml;
+  }
   }
 
   function render(){
@@ -1864,39 +1836,8 @@ tbody tr:hover{background:#EEF2FF}
       // Continue with existing rendering logic
       next("Rendering…");
       
-      // Update UI elements
-      const types=uniq(PROJECTS.map(p=>p.ProjectType)).sort();
-      const bus=uniq(SITES.map(getBU)).filter(v=>v && v!=='Other');
-      const years=uniq(PROJECTS.map(p=>p.Year)).sort((a,b)=>String(a).localeCompare(String(b)));
-      const statuses=uniq(PROJECTS.map(p=>p.Status||'')).sort();
-      const fill=(el,arr,lbl)=>el.innerHTML=`<option value="">All ${lbl||""}</option>`+arr.map(v=>`<option>${v}</option>`).join("");
-      // Always show all 3 regions, plus any additional ones found in data
-      const allRegions = [...new Set([...bus, 'BEA', 'BNA', 'BSA'])].sort();
-      fill(document.getElementById('fBU'), allRegions, 'Region');
-      fill(document.getElementById("fType"),types,"Types");
-      fill(document.getElementById("fYear"),years,"Years");
-      fill(document.getElementById("fStatus"),statuses,"Statuses");
-
-      // Update inventory KPIs
-      const countTrue=col=>SITES.filter(s=> s && toBool(s[col])===true).length;
-      const invDefs=[
-        {name:"New OT Network IP",col:"UsesNewOTNetworkIP"},
-        {name:"Monitored (SolarWinds OT)",col:"MonitoredSolarWindsOT"},
-        {name:"Monitored (SINEC OT)",col:"MonitoredSinecNMSOT"},
-        {name:"In OT vSphere",col:"InOTvSphere"},
-        {name:"Local OT Domain Controller",col:"LocalOTDomainController"}
-      ];
-      const invHtml=invDefs.map(k=>`<div class="card"><div class="label">${k.name}</div><div class="value">${countTrue(k.col)}</div></div>`).join("");
-      const buSel = document.getElementById('fBU').value;
-      if(!buSel){
-        const buCards = ['BEA','BNA','BSA'].map(b=>{
-          const nSites = SITES.filter(s=> getBU(s)===b).length || 0;
-          return `<div class="card bu ${b}"><div class="label">${b}</div><div class="value">${nSites}</div></div>`;
-        }).join('');
-        document.getElementById("kpiInventory").innerHTML = invHtml + `<div class="kpi bu-strip">${buCards}</div>`;
-      } else {
-        document.getElementById("kpiInventory").innerHTML = invHtml;
-      }
+      // Update UI elements and KPIs
+      updateUIAndKPIs();
 
       // Update site picker
       const siteOptions = siteCodes.slice().sort();
