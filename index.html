@@ -893,6 +893,69 @@ tbody tr:hover{background:#EEF2FF}
     return row;
   }
 
+  // ===== CSV Loader for Site Inventory =====
+  async function loadSiteInventoryCSV() {
+    try {
+      const response = await fetch('sites-inventory.csv');
+      if (!response.ok) {
+        logDiag('Site inventory CSV not found, skipping inventory data');
+        return null;
+      }
+      const csvText = await response.text();
+      const lines = csvText.split('\n').filter(line => line.trim());
+      if (lines.length < 2) return null;
+      
+      // Parse headers
+      const headers = lines[0].split(',').map(h => h.trim().replace(/^"|"$/g, ''));
+      const inventory = {};
+      
+      // Parse data rows
+      for (let i = 1; i < lines.length; i++) {
+        const values = lines[i].split(',').map(v => v.trim().replace(/^"|"$/g, ''));
+        if (values.length < headers.length) continue;
+        
+        const row = {};
+        headers.forEach((header, idx) => {
+          row[header.toLowerCase()] = values[idx];
+        });
+        
+        // Extract site code
+        const site = row.site || '';
+        if (!site) continue;
+        
+        // Parse coordinates if available
+        let lat = null, lon = null;
+        if (row.latitude && !isNaN(parseFloat(row.latitude))) {
+          lat = parseFloat(row.latitude);
+        }
+        if (row.longitude && !isNaN(parseFloat(row.longitude))) {
+          lon = parseFloat(row.longitude);
+        }
+        
+        inventory[site.toUpperCase()] = {
+          site: site.toUpperCase(),
+          region: row.region || '',
+          bu: row.bu || '',
+          country: row.country || '',
+          latitude: lat,
+          longitude: lon,
+          usesNewOTNetwork: row.usesneotnetwo && row.usesneotnetwo.toLowerCase() === 'true',
+          monitoredSolarWinds: row.monitoredsolarwinds && row.monitoredsolarwinds.toLowerCase() === 'true',
+          monitoredSinecNMS: row.monitoredsinecnms && row.monitoredsinecnms.toLowerCase() === 'true',
+          inOTvSphere: row.inotvsphere && row.inotvsphere.toLowerCase() === 'true',
+          localOTDomainController: row.localotdomaincontrolle && row.localotdomaincontrolle.toLowerCase() === 'true',
+          otSubnetCID: row.otsubnetcid && row.otsubnetcid.toLowerCase() === 'true'
+        };
+      }
+      
+      logDiag('Site inventory loaded from CSV', {sites: Object.keys(inventory).length});
+      return inventory;
+    } catch (error) {
+      logDiag('Error loading site inventory CSV:', error);
+      return null;
+    }
+  }
+
   // ===== Azure DevOps Integration Functions =====
   async function loadDataFromDevOps() {
     try {
@@ -1065,6 +1128,9 @@ tbody tr:hover{background:#EEF2FF}
         return null;
       };
 
+      // Load site inventory from CSV (if available)
+      const inventory = await loadSiteInventoryCSV();
+      
       // For sites, we'll create a summary from the work items
       SITES = [];
       const allSiteCodes = workItems.map(item => item.fields['Custom.SiteCode']).filter(Boolean);
@@ -1075,18 +1141,51 @@ tbody tr:hover{background:#EEF2FF}
       siteCodes.forEach(siteCode => {
         const siteItems = workItems.filter(item => item.fields['Custom.SiteCode'] === siteCode);
         const coords = findSiteCoordinates(siteCode);
-        logDiag(`Site: ${siteCode}, Found coordinates:`, coords);
+        const invData = inventory ? inventory[siteCode.toUpperCase()] : null;
+        logDiag(`Site: ${siteCode}, Found coordinates:`, coords, 'Inventory data:', invData);
         SITES.push({
           Site: siteCode,
-          Region: siteItems[0]?.fields['Custom.Region'] || '',
-          BusinessUnit: extractBusinessUnit(siteItems[0]?.fields['System.AreaPath'] || ''),
+          Region: invData?.region || siteItems[0]?.fields['Custom.Region'] || '',
+          BusinessUnit: invData?.bu || extractBusinessUnit(siteItems[0]?.fields['System.AreaPath'] || ''),
           ProjectCount: siteItems.filter(item => ['Project', 'Program'].includes(item.fields['System.WorkItemType'])).length,
           TaskCount: siteItems.filter(item => ['Task', 'Bug', 'Issue', 'Requirement'].includes(item.fields['System.WorkItemType'])).length,
-          Latitude: coords?.lat || null,
-          Longitude: coords?.lon || null,
-          LocationName: coords?.name || siteCode
+          Latitude: invData?.latitude || coords?.lat || null,
+          Longitude: invData?.longitude || coords?.lon || null,
+          LocationName: invData?.country ? `${invData.country} (${siteCode})` : (coords?.name || siteCode),
+          UsesNewOTNetwork: invData?.usesNewOTNetwork || false,
+          MonitoredSolarWinds: invData?.monitoredSolarWinds || false,
+          MonitoredSinecNMS: invData?.monitoredSinecNMS || false,
+          InOTvSphere: invData?.inOTvSphere || false,
+          LocalOTDomainController: invData?.localOTDomainController || false,
+          OTSubnetCID: invData?.otSubnetCID || false
         });
       });
+      
+      // Add inventory sites that weren't in work items
+      if (inventory) {
+        Object.keys(inventory).forEach(siteCode => {
+          if (!siteCodes.includes(siteCode) && !['BEA', 'BNA', 'BSA'].includes(siteCode.toUpperCase())) {
+            const invData = inventory[siteCode];
+            siteCodes.push(siteCode);
+            SITES.push({
+              Site: siteCode,
+              Region: invData.region || '',
+              BusinessUnit: invData.bu || '',
+              ProjectCount: 0,
+              TaskCount: 0,
+              Latitude: invData.latitude || null,
+              Longitude: invData.longitude || null,
+              LocationName: invData.country ? `${invData.country} (${siteCode})` : siteCode,
+              UsesNewOTNetwork: invData.usesNewOTNetwork || false,
+              MonitoredSolarWinds: invData.monitoredSolarWinds || false,
+              MonitoredSinecNMS: invData.monitoredSinecNMS || false,
+              InOTvSphere: invData.inOTvSphere || false,
+              LocalOTDomainController: invData.localOTDomainController || false,
+              OTSubnetCID: invData.otSubnetCID || false
+            });
+          }
+        });
+      }
       
       logDiag('Azure DevOps data loaded', {projects: PROJECTS.length, tasks: TASKS.length, sites: SITES.length});
       logDiag('SITES array:', SITES);
