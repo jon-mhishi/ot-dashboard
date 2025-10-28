@@ -1511,6 +1511,17 @@ tbody tr:hover{background:#EEF2FF}
     {name:"Local OT Domain Controller",col:"LocalOTDomainController"}
   ];
   const invHtml=invDefs.map(k=>`<div class="card"><div class="label">${k.name}</div><div class="value">${countTrue(k.col)}</div></div>`).join("");
+  
+  // Debug KPI calculations
+  console.log('🔍 KPI Debug - SITES array length:', SITES.length);
+  console.log('🔍 KPI Debug - Sample site (first):', SITES[0]);
+  console.log('🔍 KPI Debug - KPI counts:', Object.fromEntries(invDefs.map(k=>{
+    const count = countTrue(k.col);
+    const sample = SITES.filter(s=> s && toBool(s[k.col])===true).slice(0, 2);
+    console.log(`   ${k.name}: count=${count}, sample sites:`, sample);
+    return [k.col, count];
+  })));
+  
   logDiag('Inventory KPI counts', Object.fromEntries(invDefs.map(k=>[k.col, countTrue(k.col)])));
   const buSel = document.getElementById('fBU').value;
   if(!buSel){
