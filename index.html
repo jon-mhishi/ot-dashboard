@@ -725,6 +725,12 @@ tbody tr:hover{background:#EEF2FF}
     console.warn=(...a)=>{ logDiag('console.warn', ...a); origWarn(...a); };
     console.log=(...a)=>{ if(VERBOSE) logDiag('console.log', ...a); origLog(...a); };
   }catch{}
+  
+  // Helper function for populating dropdowns
+  function fill(el, arr, lbl){
+    return el.innerHTML=`<option value="">All ${lbl||""}</option>`+arr.map(v=>`<option>${v}</option>`).join("");
+  }
+  
   // Hide diagnostics controls in normal mode (only show when debug=1)
   try{ if(location.search.indexOf('debug=1')===-1){ if(btnDiag) btnDiag.style.display='none'; if(btnCopyDiag) btnCopyDiag.style.display='none'; if(diagEl) diagEl.style.display='none'; } }catch{}
   if(btnDiag){ btnDiag.onclick=()=>{ const v=diagEl.style.display!==''; diagEl.style.display=v?'':'none'; btnDiag.textContent = v? 'Hide Diagnostics':'Diagnostics'; }; }
@@ -1443,44 +1449,43 @@ tbody tr:hover{background:#EEF2FF}
     const bus=uniq(SITES.map(getBU)).filter(v=>v && v!=='Other');
     const years=uniq(PROJECTS.map(p=>p.Year)).sort((a,b)=>String(a).localeCompare(String(b)));
     const statuses=uniq(PROJECTS.map(p=>p.Status||'')).sort();
-    const fill=(el,arr,lbl)=>el.innerHTML=`<option value="">All ${lbl||""}</option>`+arr.map(v=>`<option>${v}</option>`).join("");
     fill(document.getElementById('fBU'), (bus.length?bus:['BEA','BNA','BSA']).sort(), 'Region');
     fill(document.getElementById("fType"),types,"Types");
     fill(document.getElementById("fYear"),years,"Years");
     fill(document.getElementById("fStatus"),statuses,"Statuses");
 
-  const countTrue=col=>SITES.filter(s=> s && toBool(s[col])===true).length;
-  // Inventory KPIs
-  const invDefs=[
-    {name:"New OT Network IP",col:"UsesNewOTNetworkIP"},
-    {name:"Monitored (SolarWinds OT)",col:"MonitoredSolarWindsOT"},
-    {name:"Monitored (SINEC OT)",col:"MonitoredSinecNMSOT"},
-    {name:"In OT vSphere",col:"InOTvSphere"},
-    {name:"Local OT Domain Controller",col:"LocalOTDomainController"}
-  ];
-  const invHtml=invDefs.map(k=>`<div class="card"><div class="label">${k.name}</div><div class="value">${countTrue(k.col)}</div></div>`).join("");
-  
-  // Debug KPI calculations
-  console.log('🔍 KPI Debug - SITES array length:', SITES.length);
-  console.log('🔍 KPI Debug - Sample site (first):', SITES[0]);
-  console.log('🔍 KPI Debug - KPI counts:', Object.fromEntries(invDefs.map(k=>{
-    const count = countTrue(k.col);
-    const sample = SITES.filter(s=> s && toBool(s[k.col])===true).slice(0, 2);
-    console.log(`   ${k.name}: count=${count}, sample sites:`, sample);
-    return [k.col, count];
-  })));
-  
-  logDiag('Inventory KPI counts', Object.fromEntries(invDefs.map(k=>[k.col, countTrue(k.col)])));
-  const buSel = document.getElementById('fBU').value;
-  if(!buSel){
-    const buCards = ['BEA','BNA','BSA'].map(b=>{
-      const nSites = SITES.filter(s=> getBU(s)===b).length || 0;
-      return `<div class="card bu ${b}"><div class="label">${b}</div><div class="value">${nSites}</div></div>`;
-    }).join('');
-    document.getElementById("kpiInventory").innerHTML = invHtml + `<div class="kpi bu-strip">${buCards}</div>`;
-  } else {
-    document.getElementById("kpiInventory").innerHTML = invHtml;
-  }
+    const countTrue=col=>SITES.filter(s=> s && toBool(s[col])===true).length;
+    // Inventory KPIs
+    const invDefs=[
+      {name:"New OT Network IP",col:"UsesNewOTNetworkIP"},
+      {name:"Monitored (SolarWinds OT)",col:"MonitoredSolarWindsOT"},
+      {name:"Monitored (SINEC OT)",col:"MonitoredSinecNMSOT"},
+      {name:"In OT vSphere",col:"InOTvSphere"},
+      {name:"Local OT Domain Controller",col:"LocalOTDomainController"}
+    ];
+    const invHtml=invDefs.map(k=>`<div class="card"><div class="label">${k.name}</div><div class="value">${countTrue(k.col)}</div></div>`).join("");
+    
+    // Debug KPI calculations
+    console.log('🔍 KPI Debug - SITES array length:', SITES.length);
+    console.log('🔍 KPI Debug - Sample site (first):', SITES[0]);
+    console.log('🔍 KPI Debug - KPI counts:', Object.fromEntries(invDefs.map(k=>{
+      const count = countTrue(k.col);
+      const sample = SITES.filter(s=> s && toBool(s[k.col])===true).slice(0, 2);
+      console.log(`   ${k.name}: count=${count}, sample sites:`, sample);
+      return [k.col, count];
+    })));
+    
+    logDiag('Inventory KPI counts', Object.fromEntries(invDefs.map(k=>[k.col, countTrue(k.col)])));
+    const buSel = document.getElementById('fBU').value;
+    if(!buSel){
+      const buCards = ['BEA','BNA','BSA'].map(b=>{
+        const nSites = SITES.filter(s=> getBU(s)===b).length || 0;
+        return `<div class="card bu ${b}"><div class="label">${b}</div><div class="value">${nSites}</div></div>`;
+      }).join('');
+      document.getElementById("kpiInventory").innerHTML = invHtml + `<div class="kpi bu-strip">${buCards}</div>`;
+    } else {
+      document.getElementById("kpiInventory").innerHTML = invHtml;
+    }
   }
 
   function render(){
