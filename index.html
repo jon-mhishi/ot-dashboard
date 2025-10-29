@@ -989,25 +989,35 @@ tbody tr:hover{background:#EEF2FF}
   // ===== Azure DevOps Integration Functions =====
   async function loadDataFromDevOps() {
     try {
-      const org = document.getElementById('devOpsOrg').value;
-      const project = document.getElementById('devOpsProject').value;
-      const token = document.getElementById('devOpsToken').value;
+      console.log('🔍 [LOAD] Starting loadDataFromDevOps');
+      
+      const org = document.getElementById('devOpsOrg')?.value || '';
+      const project = document.getElementById('devOpsProject')?.value || '';
+      const token = document.getElementById('devOpsToken')?.value || '';
+      
+      console.log('🔍 [LOAD] Form values:', {org, project, tokenLength: token.length || 0});
       
       if (!org || !project || !token) {
-        throw new Error('Please fill in Organization, Project, and Personal Access Token');
+        const err = `Please fill in Organization, Project, and Personal Access Token. Current values: org=${org || 'empty'}, project=${project || 'empty'}, token=${token ? 'provided' : 'empty'}`;
+        console.error('❌ [LOAD]', err);
+        throw new Error(err);
       }
       
       next("Loading Azure DevOps data…");
       logDiag('Loading data from Azure DevOps', {org, project, query: 'all work items'});
       
+      console.log('🔍 [LOAD] Calling getDevOpsWorkItems...');
       // Get work items from Azure DevOps
       const workItems = await getDevOpsWorkItems(org, project, token);
+      console.log('✅ [LOAD] Received', workItems.length, 'work items from API');
       
       // Store original work items for region filtering
       window.originalWorkItems = workItems;
+      console.log('🔍 [LOAD] Stored', workItems.length, 'original work items');
       
       // Get exclude paths configuration
       const excludePaths = document.getElementById('devOpsExcludePaths')?.value?.split(',').map(p => p.trim()).filter(Boolean) || ['BAU', 'BEA 2025 Continuous'];
+      console.log('🔍 [LOAD] Exclude paths:', excludePaths);
       
       // Process work items into our data structure
       const excludedProjects = workItems.filter(item => 
@@ -1217,6 +1227,13 @@ tbody tr:hover{background:#EEF2FF}
         });
       }
       
+      console.log('✅ [LOAD] Data processing complete:', {
+        projects: PROJECTS.length,
+        tasks: TASKS.length,
+        sites: SITES.length,
+        siteCodes: siteCodes.length
+      });
+      
       logDiag('Azure DevOps data loaded', {projects: PROJECTS.length, tasks: TASKS.length, sites: SITES.length});
       logDiag('SITES array:', SITES);
       logDiag('Site codes extracted:', siteCodes);
@@ -1251,6 +1268,9 @@ tbody tr:hover{background:#EEF2FF}
       
       return true;
     } catch (error) {
+      console.error('❌ [LOAD] Failed to load Azure DevOps data:', error);
+      console.error('❌ [LOAD] Error message:', error.message);
+      console.error('❌ [LOAD] Error stack:', error.stack);
       logDiag('Failed to load Azure DevOps data:', error);
       throw error;
     }
@@ -1258,8 +1278,18 @@ tbody tr:hover{background:#EEF2FF}
 
   async function getDevOpsWorkItems(org, project, token) {
     try {
+      console.log('🔍 [API] Starting getDevOpsWorkItems:', {org, project, tokenLength: token?.length || 0});
+      
+      if (!org || !project || !token) {
+        const err = `Missing required parameters: org=${!!org}, project=${!!project}, token=${!!token}`;
+        console.error('❌ [API]', err);
+        throw new Error(err);
+      }
+      
       // First, let's get the list of projects to find the correct project name
       const projectsUrl = `https://dev.azure.com/${org}/_apis/projects?api-version=7.0`;
+      console.log('🔍 [API] Fetching projects from:', projectsUrl);
+      
       const projectsResponse = await fetch(projectsUrl, {
         headers: {
           'Authorization': `Basic ${btoa(':' + token)}`,
@@ -1267,14 +1297,26 @@ tbody tr:hover{background:#EEF2FF}
         }
       });
       
+      console.log('🔍 [API] Projects response status:', projectsResponse.status, projectsResponse.statusText);
+      
       if (!projectsResponse.ok) {
-        throw new Error(`Failed to get projects: ${projectsResponse.status} ${projectsResponse.statusText}`);
+        const errorBody = await projectsResponse.text().catch(() => 'Unable to read error body');
+        const err = `Failed to get projects: ${projectsResponse.status} ${projectsResponse.statusText}. Response: ${errorBody}`;
+        console.error('❌ [API]', err);
+        throw new Error(err);
       }
       
       const projectsData = await projectsResponse.json();
       const projects = projectsData.value || [];
       
+      console.log('🔍 [API] Available projects:', projects.map(p => p.name));
       logDiag('Available projects:', projects.map(p => p.name));
+      
+      if (projects.length === 0) {
+        const err = `No projects found in organization "${org}". Check that you have access to this organization.`;
+        console.error('❌ [API]', err);
+        throw new Error(err);
+      }
       
       // Find the project by name (case-insensitive)
       const foundProject = projects.find(p => 
@@ -1284,10 +1326,13 @@ tbody tr:hover{background:#EEF2FF}
       );
       
       if (!foundProject) {
-        throw new Error(`Project "${project}" not found. Available projects: ${projects.map(p => p.name).join(', ')}`);
+        const err = `Project "${project}" not found. Available projects: ${projects.map(p => p.name).join(', ')}`;
+        console.error('❌ [API]', err);
+        throw new Error(err);
       }
       
       const actualProjectName = foundProject.name;
+      console.log('🔍 [API] Using project:', actualProjectName);
       logDiag('Using project:', actualProjectName);
       
       // Now get work items using the correct project name
@@ -1304,6 +1349,9 @@ tbody tr:hover{background:#EEF2FF}
         ORDER BY [System.ChangedDate] DESC
       `;
       
+      console.log('🔍 [API] Executing WIQL query for project:', actualProjectName);
+      console.log('🔍 [API] WIQL URL:', url);
+      
       const response = await fetch(url, {
         method: 'POST',
         headers: {
@@ -1313,23 +1361,33 @@ tbody tr:hover{background:#EEF2FF}
         body: JSON.stringify({ query: wiqlQuery })
       });
       
+      console.log('🔍 [API] WIQL response status:', response.status, response.statusText);
+      
       if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`Azure DevOps API error: ${response.status} ${response.statusText}. Details: ${errorText}`);
+        const errorText = await response.text().catch(() => 'Unable to read error body');
+        const err = `Azure DevOps API error: ${response.status} ${response.statusText}. Details: ${errorText.substring(0, 500)}`;
+        console.error('❌ [API]', err);
+        throw new Error(err);
       }
       
       const queryResult = await response.json();
+      console.log('🔍 [API] WIQL query result:', {workItemCount: queryResult.workItems?.length || 0, queryResult: queryResult});
       
       if (!queryResult.workItems || queryResult.workItems.length === 0) {
+        console.warn('⚠️ [API] No work items found in project:', actualProjectName);
         logDiag('No work items found in project:', actualProjectName);
         return [];
       }
       
+      console.log('✅ [API] Found work items:', queryResult.workItems.length);
       logDiag('Found work items:', queryResult.workItems.length);
       
       // Get detailed work item data
       const workItemIds = queryResult.workItems.map(item => item.id);
       const detailsUrl = `https://dev.azure.com/${org}/${encodeURIComponent(actualProjectName)}/_apis/wit/workitems?ids=${workItemIds.join(',')}&api-version=7.0&$expand=all`;
+      
+      console.log('🔍 [API] Fetching work item details for', workItemIds.length, 'items');
+      console.log('🔍 [API] Details URL:', detailsUrl.substring(0, 200) + '...');
       
       const detailsResponse = await fetch(detailsUrl, {
         headers: {
@@ -1338,14 +1396,24 @@ tbody tr:hover{background:#EEF2FF}
         }
       });
       
+      console.log('🔍 [API] Details response status:', detailsResponse.status, detailsResponse.statusText);
+      
       if (!detailsResponse.ok) {
-        throw new Error(`Azure DevOps details API error: ${detailsResponse.status} ${detailsResponse.statusText}`);
+        const errorBody = await detailsResponse.text().catch(() => 'Unable to read error body');
+        const err = `Azure DevOps details API error: ${detailsResponse.status} ${detailsResponse.statusText}. Response: ${errorBody.substring(0, 500)}`;
+        console.error('❌ [API]', err);
+        throw new Error(err);
       }
       
       const detailsResult = await detailsResponse.json();
-      return detailsResult.value || [];
+      const workItems = detailsResult.value || [];
+      console.log('✅ [API] Retrieved', workItems.length, 'work items with details');
+      
+      return workItems;
       
     } catch (error) {
+      console.error('❌ [API] Error getting Azure DevOps work items:', error);
+      console.error('❌ [API] Error stack:', error.stack);
       logDiag('Error getting Azure DevOps work items:', error);
       throw error;
     }
