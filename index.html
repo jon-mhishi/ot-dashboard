@@ -1634,10 +1634,20 @@ tbody tr:hover{background:#EEF2FF}
         const mapEl = document.getElementById("map");
         if (mapEl) {
           try {
-            map = L.map("map", {attributionControl: false}).setView([20, 0], 2);
-            L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-              attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-            }).addTo(map);
+            map = L.map("map", {
+              attributionControl: false,
+              minZoom: 2,
+              maxZoom: 18,
+              worldCopyJump: true // Prevent tile repetition
+            }).setView([20, 0], 2);
+            
+            const tileLayer = L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+              attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+              minZoom: 2,
+              maxZoom: 18,
+              noWrap: false // Allow tiles to wrap around the world
+            });
+            tileLayer.addTo(map);
             logDiag('Map initialized in render()');
             console.log('🔍 Map initialized in render()');
           } catch (error) {
@@ -1692,13 +1702,13 @@ tbody tr:hover{background:#EEF2FF}
                 fillOpacity: 0.9
               };
             } else {
-              // Inventory-only marker: smaller, subtle gray/blue
+              // Inventory-only marker: smaller, light blue for better visibility
               markerOptions = {
                 radius: 6,
-                weight: 1,
-                color: '#94A3B8',
-                fillColor: '#CBD5E1', // Light gray/blue for inventory-only
-                fillOpacity: 0.6
+                weight: 2,
+                color: '#60A5FA', // Blue border
+                fillColor: '#3B82F6', // Light blue fill
+                fillOpacity: 0.7
               };
             }
             
@@ -1774,7 +1784,7 @@ tbody tr:hover{background:#EEF2FF}
               });
               popupHtml += `</div>`;
             } else {
-              popupHtml += ` <span style="color: #94A3B8; font-size: 11px;">(Site Location)</span>`;
+              popupHtml += ` <span style="color: #3B82F6; font-size: 11px;">(Site Location)</span>`;
             }
             popupHtml += `<div style="margin-top: 4px; font-size: 11px; color: #6B7280;">${data.lat.toFixed(4)}, ${data.lon.toFixed(4)}</div></div>`;
             
@@ -1789,18 +1799,48 @@ tbody tr:hover{background:#EEF2FF}
           }
         });
         
-        // Fit map to show all markers
+        // Fit map to show all markers, but ensure world view is maintained
         if (markers.length > 0) {
           try {
             const group = L.featureGroup(markers);
             const bounds = group.getBounds();
-            map.fitBounds(bounds.pad(0.1));
-            console.log(`🔍 Map fitted to bounds with ${markers.length} markers. Bounds:`, bounds.toBBoxString());
-            logDiag('Map bounds set to show all markers', {count: markers.length, bounds: bounds.toBBoxString()});
+            
+            // Check if bounds are reasonable (not too zoomed in)
+            const boundsWidth = bounds.getEast() - bounds.getWest();
+            const boundsHeight = bounds.getNorth() - bounds.getSouth();
+            
+            // If bounds are very small (likely clustered markers), use world view
+            if (boundsWidth < 5 || boundsHeight < 5) {
+              // Markers are clustered - show world view
+              map.setView([20, 0], 2);
+              console.log(`🔍 Markers clustered - showing world view`);
+            } else if (boundsWidth > 150) {
+              // Markers span too wide - show world view to avoid tile repetition issues
+              map.setView([20, 0], 2);
+              console.log(`🔍 Markers span too wide (${boundsWidth.toFixed(1)}°) - showing world view`);
+            } else {
+              // Normal case: fit to bounds with padding, but limit max zoom to ensure world remains visible
+              // Clamp longitude to prevent tile wrapping issues
+              const east = Math.min(bounds.getEast(), 179);
+              const west = Math.max(bounds.getWest(), -179);
+              const north = Math.min(bounds.getNorth(), 85);
+              const south = Math.max(bounds.getSouth(), -85);
+              
+              const clampedBounds = L.latLngBounds([[south, west], [north, east]]);
+              map.fitBounds(clampedBounds.pad(0.1), {
+                maxZoom: 5 // Limit max zoom to keep world view
+              });
+              console.log(`🔍 Map fitted to bounds with ${markers.length} markers. Bounds:`, clampedBounds.toBBoxString());
+            }
+            logDiag('Map bounds set to show all markers', {count: markers.length});
           } catch(error) {
             console.error('🔍 Error fitting map bounds:', error);
+            // Fallback to world view
+            map.setView([20, 0], 2);
           }
         } else {
+          // No markers - show world view
+          map.setView([20, 0], 2);
           console.log('🔍 No markers created - siteCoordsMap size:', siteCoordsMap.size, 'map exists:', !!map);
           logDiag('No markers to display on map. SITES array:', SITES.length);
         }
@@ -2184,7 +2224,14 @@ tbody tr:hover{background:#EEF2FF}
       return;
     }
     
-    map=L.map('map',{zoomControl:true, preferCanvas:true, scrollWheelZoom:false}).setView([20,0],2);
+    map=L.map('map',{
+      zoomControl:true, 
+      preferCanvas:true, 
+      scrollWheelZoom:false,
+      minZoom: 2,
+      maxZoom: 18,
+      worldCopyJump: true // Prevent tile repetition
+    }).setView([20,0],2);
     try{ map.touchZoom.disable(); map.doubleClickZoom.disable(); }catch{}
     // Re-enable zoom on explicit user intent (Ctrl+wheel)
     try{
@@ -2193,14 +2240,14 @@ tbody tr:hover{background:#EEF2FF}
     }catch{}
     // Default provider only: Esri Light Gray
     const providers=[
-      {name:'EsriLightGray', url:'https://services.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}', opts:{maxZoom:19, crossOrigin:true, attribution:'&copy; Esri'}}
+      {name:'EsriLightGray', url:'https://services.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}', opts:{maxZoom:19, crossOrigin:true, attribution:'&copy; Esri', minZoom: 2, noWrap: false}}
     ];
     let baseLayer=null; let tilesOk=false;
     function useProvider(i){
       if(baseLayer){ map.removeLayer(baseLayer); baseLayer=null; }
       if(i>=providers.length) return false;
       const p=providers[i];
-      baseLayer=L.tileLayer(p.url,{detectRetina:true, ...p.opts}).addTo(map);
+      baseLayer=L.tileLayer(p.url,{detectRetina:true, ...p.opts, noWrap: false}).addTo(map);
       let failed=false; baseLayer.on('tileerror',(ev)=>{ logDiag('tileerror', {provider:p.name, src:ev && ev.tile && ev.tile.src}); if(!failed){ failed=true; useProvider(i+1); } });
       baseLayer.on('load',()=>{ tilesOk=true; logDiag('tiles loaded', {provider:p.name}); try{ const pane=map.getPanes().overlayPane; if(pane&&pane.querySelectorAll){ pane.querySelectorAll('canvas[data-map-overlay="1"]').forEach(el=>{ try{ el.remove(); }catch{} }); } }catch{} });
       document.getElementById('mapNote').textContent = `Map: ${p.name}`;
