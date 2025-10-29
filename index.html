@@ -270,6 +270,17 @@ tbody tr:hover{background:#EEF2FF}
 .table-wrap::-webkit-scrollbar{height:10px;width:10px}
 .table-wrap::-webkit-scrollbar-thumb{background:#CBD5E1;border-radius:999px}
 .table-wrap::-webkit-scrollbar-track{background:#F1F5F9;border-radius:999px}
+
+/* Pulsing beacon effect for active project markers */
+@keyframes pulse-beacon {
+  0% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.4); opacity: 0.7; }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+.map-beacon {
+  animation: pulse-beacon 2s ease-in-out infinite;
+}
 </style>
 
 <style>
@@ -1636,12 +1647,27 @@ tbody tr:hover{background:#EEF2FF}
         }
       }
       
-      // Always add markers if map is available (even if hidden)
+        // Always add markers if map is available (even if hidden)
       if (map && siteCoordsMap.size > 0) {
-        // Clear existing markers and circle markers
+        // Clear existing markers and circle markers (including pulse rings)
         map.eachLayer(layer => {
           if (layer instanceof L.Marker || layer instanceof L.CircleMarker) {
+            // Stop any pulse intervals if they exist
+            if (layer._pulseInterval) {
+              clearInterval(layer._pulseInterval);
+              delete layer._pulseInterval;
+            }
+            // Clean up any pulse rings
+            if (layer._pulseRings && Array.isArray(layer._pulseRings)) {
+              layer._pulseRings.forEach(ring => {
+                if (map.hasLayer(ring)) map.removeLayer(ring);
+              });
+              delete layer._pulseRings;
+            }
             map.removeLayer(layer);
+          } else if (layer instanceof L.Circle && layer.options && (layer.options.dashArray === '10, 10' || layer.options.className === 'map-beacon')) {
+            // Remove pulse rings
+            if (map.hasLayer(layer)) map.removeLayer(layer);
           }
         });
         
@@ -1651,18 +1677,95 @@ tbody tr:hover{background:#EEF2FF}
         console.log('🔍 Creating markers for', siteCoordsMap.size, 'sites on map');
         siteCoordsMap.forEach((data, siteCode) => {
           try {
-            const marker = L.circleMarker([data.lat, data.lon], {
-              radius: 7, 
-              weight: 2, 
-              color: '#ffffff', 
-              fillColor: '#1A73E8', 
-              fillOpacity: 0.95
-            });
+            const projList = data.projects || [];
+            const hasActiveProjects = projList.length > 0;
+            
+            // Different marker styles based on whether site has active projects
+            let markerOptions;
+            if (hasActiveProjects) {
+              // Active project marker: larger, bright orange/red, with beacon effect
+              markerOptions = {
+                radius: 11,
+                weight: 3,
+                color: '#FFFFFF',
+                fillColor: '#F59E0B', // Amber/orange for active projects
+                fillOpacity: 0.9
+              };
+            } else {
+              // Inventory-only marker: smaller, subtle gray/blue
+              markerOptions = {
+                radius: 6,
+                weight: 1,
+                color: '#94A3B8',
+                fillColor: '#CBD5E1', // Light gray/blue for inventory-only
+                fillOpacity: 0.6
+              };
+            }
+            
+            const marker = L.circleMarker([data.lat, data.lon], markerOptions);
+            
+            // Add pulsing beacon effect for active projects using a pulsing circle behind the marker
+            if (hasActiveProjects) {
+              // Make marker larger and more prominent
+              marker.setStyle({
+                radius: 12,
+                weight: 3,
+                fillColor: '#EF4444', // Red for high visibility
+                color: '#FFFFFF'
+              });
+              
+              // Add a pulsing ring animation
+              let pulseRing = null;
+              const updatePulse = () => {
+                if (pulseRing) map.removeLayer(pulseRing);
+                pulseRing = L.circle([data.lat, data.lon], {
+                  radius: 30000, // ~30km radius for visible pulse
+                  color: '#F59E0B',
+                  weight: 3,
+                  fill: false,
+                  opacity: 0.5,
+                  dashArray: '10, 10',
+                  className: 'map-beacon'
+                }).addTo(map);
+                
+                // Store reference on marker for cleanup
+                if (!marker._pulseRings) marker._pulseRings = [];
+                marker._pulseRings.push(pulseRing);
+                
+                // Fade out and remove after 2 seconds
+                setTimeout(() => {
+                  if (pulseRing && map.hasLayer(pulseRing)) {
+                    // Fade out animation
+                    let opacity = 0.5;
+                    const fadeInterval = setInterval(() => {
+                      opacity -= 0.1;
+                      if (opacity <= 0 || !map.hasLayer(pulseRing)) {
+                        clearInterval(fadeInterval);
+                        map.removeLayer(pulseRing);
+                        if (marker._pulseRings) {
+                          const idx = marker._pulseRings.indexOf(pulseRing);
+                          if (idx > -1) marker._pulseRings.splice(idx, 1);
+                        }
+                      } else {
+                        pulseRing.setStyle({ opacity });
+                      }
+                    }, 100);
+                  }
+                }, 1800);
+              };
+              
+              // Start pulsing animation
+              updatePulse();
+              const pulseInterval = setInterval(updatePulse, 2000);
+              
+              // Store interval for cleanup
+              marker._pulseInterval = pulseInterval;
+            }
             
             // Build popup content
-            const projList = data.projects || [];
             let popupHtml = `<div style="min-width: 200px;"><b>${siteCode}</b>`;
-            if (projList.length > 0) {
+            if (hasActiveProjects) {
+              popupHtml += ` <span style="background: #F59E0B; color: white; padding: 2px 6px; border-radius: 3px; font-size: 10px; font-weight: bold;">ACTIVE PROJECTS</span>`;
               popupHtml += `<div style="margin-top: 4px;">`;
               projList.forEach(p => {
                 const type = p.ProjectType ? `<b>[${p.ProjectType}]</b> ` : '';
@@ -1670,13 +1773,17 @@ tbody tr:hover{background:#EEF2FF}
                 popupHtml += `<div>${type}${p.Project || ''}${status}</div>`;
               });
               popupHtml += `</div>`;
+            } else {
+              popupHtml += ` <span style="color: #94A3B8; font-size: 11px;">(Site Location)</span>`;
             }
             popupHtml += `<div style="margin-top: 4px; font-size: 11px; color: #6B7280;">${data.lat.toFixed(4)}, ${data.lon.toFixed(4)}</div></div>`;
             
             marker.bindPopup(popupHtml);
             marker.addTo(map);
             markers.push(marker);
-            if(markers.length <= 3) console.log(`🔍 Added marker for ${siteCode} at [${data.lat}, ${data.lon}]`);
+            
+            const markerType = hasActiveProjects ? 'ACTIVE PROJECT' : 'inventory-only';
+            if(markers.length <= 5) console.log(`🔍 Added ${markerType} marker for ${siteCode} at [${data.lat}, ${data.lon}]`);
           } catch(error) {
             console.error(`🔍 Error creating marker for ${siteCode}:`, error);
           }
