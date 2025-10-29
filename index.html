@@ -1577,48 +1577,84 @@ tbody tr:hover{background:#EEF2FF}
       }
       
       if (map) {
-        // Clear existing markers
+        // Clear existing markers and circle markers
         map.eachLayer(layer => {
-          if (layer instanceof L.Marker) {
+          if (layer instanceof L.Marker || layer instanceof L.CircleMarker) {
             map.removeLayer(layer);
           }
         });
         
-        // Add markers for projects with coordinates
-        const projectsWithCoords = rows.filter(p => p.Latitude && p.Longitude && !isNaN(p.Latitude) && !isNaN(p.Longitude));
-        logDiag('Projects with coordinates for map:', projectsWithCoords.length, projectsWithCoords);
+        // Collect coordinates from both PROJECTS (rows) and SITES
+        const siteCoordsMap = new Map(); // site -> {lat, lon, projects: []}
+        const markers = [];
         
-        if (projectsWithCoords.length === 0) {
-          logDiag('No projects with valid coordinates found. Available projects:', rows.map(p => ({
-            title: p.Project || p.Title,
-            site: p.Site,
-            lat: p.Latitude,
-            lon: p.Longitude
-          })));
-        }
+        // First, collect coordinates from filtered projects
+        rows.forEach(p => {
+          const {lat, lon} = fixLatLon(p.Latitude, p.Longitude);
+          if (!isNaN(lat) && !isNaN(lon)) {
+            const site = (p.Site || '').toString().trim().toUpperCase();
+            if (site) {
+              if (!siteCoordsMap.has(site)) {
+                siteCoordsMap.set(site, {lat, lon, projects: []});
+              }
+              siteCoordsMap.get(site).projects.push(p);
+            }
+          }
+        });
         
-        projectsWithCoords.forEach(project => {
-          const marker = L.marker([parseFloat(project.Latitude), parseFloat(project.Longitude)])
-            .addTo(map)
-            .bindPopup(`
-              <div style="min-width: 200px;">
-                <h4>${project.Project || project.Title || 'Unknown Project'}</h4>
-                <p><strong>Status:</strong> ${project.Status || 'Unknown'}</p>
-                <p><strong>Site:</strong> ${project.Site || 'Unknown'}</p>
-                <p><strong>Business Unit:</strong> ${project.BusinessUnit || 'Unknown'}</p>
-                <p><strong>Coordinates:</strong> ${project.Latitude}, ${project.Longitude}</p>
-                ${project.Description ? `<p><strong>Description:</strong> ${project.Description.substring(0, 100)}${project.Description.length > 100 ? '...' : ''}</p>` : ''}
-              </div>
-            `);
+        // Then, add SITES coordinates (for sites without project coordinates)
+        SITES.forEach(s => {
+          const siteCode = (s.Site || '').toString().trim().toUpperCase();
+          if (!siteCode || siteCoordsMap.has(siteCode)) return; // Skip if already have coords from projects
+          
+          const {lat, lon} = fixLatLon(s.Latitude, s.Longitude);
+          if (!isNaN(lat) && !isNaN(lon)) {
+            siteCoordsMap.set(siteCode, {lat, lon, projects: []});
+            // Find any projects for this site
+            rows.filter(p => (p.Site || '').toString().trim().toUpperCase() === siteCode)
+                .forEach(p => siteCoordsMap.get(siteCode).projects.push(p));
+          }
+        });
+        
+        console.log('🔍 Map Debug in render() - Sites with coordinates:', siteCoordsMap.size);
+        console.log('🔍 Map Debug in render() - Sample sites:', Array.from(siteCoordsMap.entries()).slice(0, 5));
+        
+        // Create markers for each site
+        siteCoordsMap.forEach((data, siteCode) => {
+          const marker = L.circleMarker([data.lat, data.lon], {
+            radius: 7, 
+            weight: 2, 
+            color: '#ffffff', 
+            fillColor: '#1A73E8', 
+            fillOpacity: 0.95
+          });
+          
+          // Build popup content
+          const projList = data.projects || [];
+          let popupHtml = `<div style="min-width: 200px;"><b>${siteCode}</b>`;
+          if (projList.length > 0) {
+            popupHtml += `<div style="margin-top: 4px;">`;
+            projList.forEach(p => {
+              const type = p.ProjectType ? `<b>[${p.ProjectType}]</b> ` : '';
+              const status = p.Status ? ` <span style="color:#6B7280">(${p.Status})</span>` : '';
+              popupHtml += `<div>${type}${p.Project || ''}${status}</div>`;
+            });
+            popupHtml += `</div>`;
+          }
+          popupHtml += `<div style="margin-top: 4px; font-size: 11px; color: #6B7280;">${data.lat.toFixed(4)}, ${data.lon.toFixed(4)}</div></div>`;
+          
+          marker.bindPopup(popupHtml);
+          marker.addTo(map);
+          markers.push(marker);
         });
         
         // Fit map to show all markers
-        if (projectsWithCoords.length > 0) {
-          const group = new L.featureGroup(projectsWithCoords.map(p => L.marker([parseFloat(p.Latitude), parseFloat(p.Longitude)])));
+        if (markers.length > 0) {
+          const group = L.featureGroup(markers);
           map.fitBounds(group.getBounds().pad(0.1));
-          logDiag('Map bounds set to show all markers');
+          logDiag('Map bounds set to show all markers', {count: markers.length});
         } else {
-          logDiag('No markers to display on map');
+          logDiag('No markers to display on map. SITES array:', SITES.length);
         }
         
         // Invalidate size to ensure proper rendering
