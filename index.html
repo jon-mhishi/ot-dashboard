@@ -1596,25 +1596,26 @@ tbody tr:hover{background:#EEF2FF}
       console.log('🔍 Map Debug in render() - Sites with coordinates:', siteCoordsMap.size);
       console.log('🔍 Map Debug in render() - Sample sites:', Array.from(siteCoordsMap.entries()).slice(0, 5));
       
-      // Only render markers if map is visible and available
-    if (document.getElementById("map").style.display !== "none") {
-      // Use existing map if available, otherwise initialize
+      // Always initialize map if needed (regardless of visibility - markers will show when map is toggled on)
       if (!map && window.L && typeof window.L.map === 'function') {
         const mapEl = document.getElementById("map");
         if (mapEl) {
           try {
-            map = L.map("map").setView([20, 0], 2);
+            map = L.map("map", {attributionControl: false}).setView([20, 0], 2);
             L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
               attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
             }).addTo(map);
             logDiag('Map initialized in render()');
+            console.log('🔍 Map initialized in render()');
           } catch (error) {
             logDiag('Leaflet map initialization failed in render():', error);
+            console.error('🔍 Map initialization error:', error);
           }
         }
       }
       
-      if (map) {
+      // Always add markers if map is available (even if hidden)
+      if (map && siteCoordsMap.size > 0) {
         // Clear existing markers and circle markers
         map.eachLayer(layer => {
           if (layer instanceof L.Marker || layer instanceof L.CircleMarker) {
@@ -1910,7 +1911,16 @@ tbody tr:hover{background:#EEF2FF}
         mapEl.style.display=on?'':'none';
         noteEl.style.display=on?'':'none';
         try{ 
-          if(on && window.L && mapRendered){ 
+          if(on && map){
+            // Re-render markers when map is toggled on
+            setTimeout(()=>{ 
+              try{ 
+                render(); // Re-render to add markers
+                map.invalidateSize(); 
+                console.log('🔍 Map toggle ON - Triggered render() to add markers');
+              }catch(e){ logDiag('Map toggle render error:', e); }
+            }, 100);
+          } else if(on && window.L && mapRendered){ 
             setTimeout(()=>{ 
               try{ 
                 const mEl=document.getElementById('map'); 
