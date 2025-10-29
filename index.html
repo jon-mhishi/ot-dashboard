@@ -2022,28 +2022,52 @@ tbody tr:hover{background:#EEF2FF}
       m[sc].push(p);
       return m;
     }, {});
-    // Prefer precise coords from Projects; fallback to Sites
+    
+    // Collect site coordinates (from both Projects and SITES)
+    const siteCoordsMap = new Map(); // site -> {lat, lon}
+    
+    // Prefer precise coords from Projects; but collect all site coords
     PROJECTS.forEach(p=>{
       const {lat, lon} = fixLatLon(p.Latitude, p.Longitude);
       if(!isNaN(lat) && !isNaN(lon)){
-        const site = (p.Site||'');
-        const type = p.ProjectType? `[${p.ProjectType}] `: '';
-        const status = p.Status? ` (${p.Status})` : '';
-        const label = `${site} — ${type}${p.Project||''}${status}`.trim();
-        pts.push({site, lat, lon, label});
+        const site = (p.Site||'').toString().trim().toUpperCase();
+        if(site){
+          siteCoordsMap.set(site, {lat, lon});
+          const type = p.ProjectType? `[${p.ProjectType}] `: '';
+          const status = p.Status? ` (${p.Status})` : '';
+          const label = `${site} — ${type}${p.Project||''}${status}`.trim();
+          pts.push({site, lat, lon, label});
+        }
       }
     });
-    if(pts.length===0){
-      SITES.forEach(s=>{
+    
+    // Add SITES coordinates (even if we found some from Projects, to ensure all sites are shown)
+    SITES.forEach(s=>{
+      const siteCode = (s.Site||'').toString().trim().toUpperCase();
+      if(!siteCode) return;
+      
+      // Only add if not already in map (from Projects)
+      if(!siteCoordsMap.has(siteCode)){
         const {lat, lon} = fixLatLon(s.Latitude, s.Longitude);
         if(!isNaN(lat) && !isNaN(lon)){
-          const sc = (s.Site||'').toString().trim().toUpperCase();
-          const proj = bySite[sc]||[];
+          siteCoordsMap.set(siteCode, {lat, lon});
+          const proj = bySite[siteCode]||[];
           const types = Array.from(new Set(proj.map(p=>p.ProjectType).filter(Boolean)));
           const top = types.length? ` — ${types.join(', ')}` : '';
-          pts.push({site:sc, lat, lon, label:`${sc}${top}`});
+          pts.push({site:siteCode, lat, lon, label:`${siteCode}${top}`});
         }
-      });
+      }
+    });
+    
+    console.log('🔍 Map Debug - Points collected:', pts.length);
+    console.log('🔍 Map Debug - Sample points:', pts.slice(0, 5));
+    if(pts.length === 0){
+      console.log('🔍 Map Debug - SITES array length:', SITES.length);
+      console.log('🔍 Map Debug - Sample SITES:', SITES.slice(0, 3).map(s => ({
+        Site: s.Site,
+        Latitude: s.Latitude,
+        Longitude: s.Longitude
+      })));
     }
 
     if(pts.length){
