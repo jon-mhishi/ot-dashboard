@@ -1559,7 +1559,8 @@ tbody tr:hover{background:#EEF2FF}
     
     // Map rendering
     if (document.getElementById("map").style.display !== "none") {
-      if (!mapRendered) {
+      // Use existing map if available, otherwise initialize
+      if (!map && window.L && typeof window.L.map === 'function') {
         const mapEl = document.getElementById("map");
         if (mapEl) {
           try {
@@ -1567,11 +1568,9 @@ tbody tr:hover{background:#EEF2FF}
             L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
               attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
             }).addTo(map);
-            mapRendered = true;
-            logDiag('Map initialized successfully');
+            logDiag('Map initialized in render()');
           } catch (error) {
-            logDiag('Leaflet map initialization failed:', error);
-            mapEl.innerHTML = '<div style="padding: 20px; text-align: center; color: #666;">Map failed to load. Please refresh the page.</div>';
+            logDiag('Leaflet map initialization failed in render():', error);
           }
         }
       }
@@ -2095,18 +2094,9 @@ tbody tr:hover{background:#EEF2FF}
       }
     });
     
-    console.log('🔍 Map Debug - Points collected:', pts.length);
-    console.log('🔍 Map Debug - Sample points:', pts.slice(0, 5));
-    if(pts.length === 0){
-      console.log('🔍 Map Debug - SITES array length:', SITES.length);
-      console.log('🔍 Map Debug - Sample SITES:', SITES.slice(0, 3).map(s => ({
-        Site: s.Site,
-        Latitude: s.Latitude,
-        Longitude: s.Longitude
-      })));
-    }
-
-    if(pts.length){
+    // Skip marker rendering here - it happens in render() after data loads
+    // This top-level code only initializes the map object
+    if(false && pts.length){
       logDiag('Map points', {count:pts.length, sample:pts.slice(0,5)});
       const group=L.layerGroup(pts.map(pt=>{
         const m=L.circleMarker([pt.lat,pt.lon],{radius:7, weight:2, color:'#ffffff', fillColor:'#1A73E8', fillOpacity:0.95});
