@@ -1489,6 +1489,7 @@ tbody tr:hover{background:#EEF2FF}
   }
 
   function render(){
+    console.log('🔍 render() called - PROJECTS:', PROJECTS.length, 'SITES:', SITES.length);
     const bu=document.getElementById('fBU').value, t=document.getElementById("fType").value, y=document.getElementById("fYear").value, s=document.getElementById("fStatus").value;
     let rows=PROJECTS.slice();
     if(bu){
@@ -1558,11 +1559,14 @@ tbody tr:hover{background:#EEF2FF}
     document.getElementById("btnExport").style.display='none';
     
     // Map rendering - always collect coordinates (even if map not visible yet)
-    // Collect coordinates from both PROJECTS (rows) and SITES
-    const siteCoordsMap = new Map(); // site -> {lat, lon, projects: []}
-    
-    // First, collect coordinates from filtered projects
-    rows.forEach(p => {
+    try {
+      // Collect coordinates from both PROJECTS (rows) and SITES
+      const siteCoordsMap = new Map(); // site -> {lat, lon, projects: []}
+      
+      console.log('🔍 Starting coordinate collection - rows:', rows.length, 'SITES:', SITES ? SITES.length : 'undefined');
+      
+      // First, collect coordinates from filtered projects
+      rows.forEach(p => {
       const {lat, lon} = fixLatLon(p.Latitude, p.Longitude);
       if (!isNaN(lat) && !isNaN(lon)) {
         const site = (p.Site || '').toString().trim().toUpperCase();
@@ -1589,10 +1593,10 @@ tbody tr:hover{background:#EEF2FF}
       }
     });
     
-    console.log('🔍 Map Debug in render() - Sites with coordinates:', siteCoordsMap.size);
-    console.log('🔍 Map Debug in render() - Sample sites:', Array.from(siteCoordsMap.entries()).slice(0, 5));
-    
-    // Only render markers if map is visible and available
+      console.log('🔍 Map Debug in render() - Sites with coordinates:', siteCoordsMap.size);
+      console.log('🔍 Map Debug in render() - Sample sites:', Array.from(siteCoordsMap.entries()).slice(0, 5));
+      
+      // Only render markers if map is visible and available
     if (document.getElementById("map").style.display !== "none") {
       // Use existing map if available, otherwise initialize
       if (!map && window.L && typeof window.L.map === 'function') {
@@ -1661,6 +1665,9 @@ tbody tr:hover{background:#EEF2FF}
         // Invalidate size to ensure proper rendering
         setTimeout(() => map.invalidateSize(), 100);
       }
+    } catch(error) {
+      console.error('🔍 Map rendering error:', error);
+      logDiag('Map rendering error', error);
     }
   }
 
