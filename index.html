@@ -1383,33 +1383,54 @@ tbody tr:hover{background:#EEF2FF}
       logDiag('Found work items:', queryResult.workItems.length);
       
       // Get detailed work item data
+      // Azure DevOps limits work item requests to 200 items at a time, so we need to batch them
       const workItemIds = queryResult.workItems.map(item => item.id);
-      const detailsUrl = `https://dev.azure.com/${org}/${encodeURIComponent(actualProjectName)}/_apis/wit/workitems?ids=${workItemIds.join(',')}&api-version=7.0&$expand=all`;
+      const batchSize = 200; // Azure DevOps limit
+      const allWorkItems = [];
       
-      console.log('🔍 [API] Fetching work item details for', workItemIds.length, 'items');
-      console.log('🔍 [API] Details URL:', detailsUrl.substring(0, 200) + '...');
+      console.log('🔍 [API] Fetching work item details for', workItemIds.length, 'items in batches of', batchSize);
       
-      const detailsResponse = await fetch(detailsUrl, {
-        headers: {
-          'Authorization': `Basic ${btoa(':' + token)}`,
-          'Content-Type': 'application/json'
+      // Process in batches
+      for (let i = 0; i < workItemIds.length; i += batchSize) {
+        const batch = workItemIds.slice(i, i + batchSize);
+        const batchNumber = Math.floor(i / batchSize) + 1;
+        const totalBatches = Math.ceil(workItemIds.length / batchSize);
+        
+        console.log(`🔍 [API] Fetching batch ${batchNumber}/${totalBatches} (${batch.length} items)`);
+        
+        const detailsUrl = `https://dev.azure.com/${org}/${encodeURIComponent(actualProjectName)}/_apis/wit/workitems?ids=${batch.join(',')}&api-version=7.0&$expand=all`;
+        
+        const detailsResponse = await fetch(detailsUrl, {
+          headers: {
+            'Authorization': `Basic ${btoa(':' + token)}`,
+            'Content-Type': 'application/json'
+          }
+        });
+        
+        console.log(`🔍 [API] Batch ${batchNumber} response status:`, detailsResponse.status, detailsResponse.statusText);
+        
+        if (!detailsResponse.ok) {
+          const errorBody = await detailsResponse.text().catch(() => 'Unable to read error body');
+          const err = `Azure DevOps details API error (batch ${batchNumber}): ${detailsResponse.status} ${detailsResponse.statusText}. Response: ${errorBody.substring(0, 500)}`;
+          console.error('❌ [API]', err);
+          throw new Error(err);
         }
-      });
-      
-      console.log('🔍 [API] Details response status:', detailsResponse.status, detailsResponse.statusText);
-      
-      if (!detailsResponse.ok) {
-        const errorBody = await detailsResponse.text().catch(() => 'Unable to read error body');
-        const err = `Azure DevOps details API error: ${detailsResponse.status} ${detailsResponse.statusText}. Response: ${errorBody.substring(0, 500)}`;
-        console.error('❌ [API]', err);
-        throw new Error(err);
+        
+        const detailsResult = await detailsResponse.json();
+        const batchWorkItems = detailsResult.value || [];
+        allWorkItems.push(...batchWorkItems);
+        
+        console.log(`✅ [API] Batch ${batchNumber} completed: ${batchWorkItems.length} items retrieved`);
+        
+        // Small delay between batches to avoid rate limiting
+        if (i + batchSize < workItemIds.length) {
+          await new Promise(resolve => setTimeout(resolve, 100));
+        }
       }
       
-      const detailsResult = await detailsResponse.json();
-      const workItems = detailsResult.value || [];
-      console.log('✅ [API] Retrieved', workItems.length, 'work items with details');
+      console.log('✅ [API] All batches complete. Retrieved', allWorkItems.length, 'work items total');
       
-      return workItems;
+      return allWorkItems;
       
     } catch (error) {
       console.error('❌ [API] Error getting Azure DevOps work items:', error);
@@ -1433,11 +1454,22 @@ tbody tr:hover{background:#EEF2FF}
 
 
   // Prompt for DevOps credentials on load
-  const credentialsProvided = await promptForDevOpsCredentials();
+  console.log('🔍 [MAIN] About to prompt for credentials...');
+  let credentialsProvided = false;
+  try {
+    credentialsProvided = await promptForDevOpsCredentials();
+    console.log('🔍 [MAIN] Credentials provided:', credentialsProvided);
+  } catch (error) {
+    console.error('❌ [MAIN] Error getting credentials:', error);
+    showErr('Error getting credentials: ' + (error.message || error));
+  }
+  
   if (credentialsProvided) {
+    console.log('🔍 [MAIN] Setting up auto-load with timeout...');
     // Auto-load data from Azure DevOps after a short delay to ensure page is ready
     setTimeout(async () => {
       try {
+        console.log('🔍 [MAIN] Timeout fired, calling loadDataFromDevOps...');
         await loadDataFromDevOps();
         
         // Continue with existing rendering logic
@@ -1469,11 +1501,17 @@ tbody tr:hover{background:#EEF2FF}
         hideLoader();
         
       } catch (error) {
+        console.error('❌ [MAIN] Error in auto-load:', error);
+        console.error('❌ [MAIN] Error message:', error.message);
+        console.error('❌ [MAIN] Error stack:', error.stack);
         showErr('Failed to load data from Azure DevOps: ' + (error.message || error));
         logDiag('Azure DevOps load error:', error);
         hideLoader();
       }
     }, 500);
+  } else {
+    console.warn('⚠️ [MAIN] Credentials not provided, skipping auto-load');
+    showErr('Please provide your Personal Access Token to load data.');
   }
 
   // Column audit (after normalization)
@@ -2088,18 +2126,49 @@ tbody tr:hover{background:#EEF2FF}
 
   // Prompt for DevOps PAT on load
   async function promptForDevOpsCredentials() {
-    const token = prompt('🔑 Enter your Azure DevOps Personal Access Token:');
-    if (!token) {
-      showErr('Personal Access Token is required to load data from Azure DevOps.');
+    console.log('🔍 [PROMPT] Starting promptForDevOpsCredentials');
+    try {
+      const token = prompt('🔑 Enter your Azure DevOps Personal Access Token:');
+      
+      if (!token || token.trim() === '') {
+        console.warn('⚠️ [PROMPT] User canceled or provided empty token');
+        showErr('Personal Access Token is required to load data from Azure DevOps.');
+        return false;
+      }
+      
+      console.log('✅ [PROMPT] Token provided, length:', token.length);
+      
+      // Set the form values with known values
+      const orgEl = document.getElementById('devOpsOrg');
+      const projectEl = document.getElementById('devOpsProject');
+      const tokenEl = document.getElementById('devOpsToken');
+      
+      if (!orgEl || !projectEl || !tokenEl) {
+        const err = 'Required form elements not found. Missing: ' + 
+          (!orgEl ? 'devOpsOrg ' : '') + 
+          (!projectEl ? 'devOpsProject ' : '') + 
+          (!tokenEl ? 'devOpsToken' : '');
+        console.error('❌ [PROMPT]', err);
+        showErr(err);
+        return false;
+      }
+      
+      orgEl.value = 'BungeDev';
+      projectEl.value = 'OT Global Infrastructure';
+      tokenEl.value = token;
+      
+      console.log('✅ [PROMPT] Form values set:', {
+        org: orgEl.value,
+        project: projectEl.value,
+        tokenLength: tokenEl.value.length
+      });
+      
+      return true;
+    } catch (error) {
+      console.error('❌ [PROMPT] Error in promptForDevOpsCredentials:', error);
+      showErr('Error getting credentials: ' + (error.message || error));
       return false;
     }
-    
-    // Set the form values with known values
-    document.getElementById('devOpsOrg').value = 'BungeDev';
-    document.getElementById('devOpsProject').value = 'OT Global Infrastructure';
-    document.getElementById('devOpsToken').value = token;
-    
-    return true;
   }
 
 
