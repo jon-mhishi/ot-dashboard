@@ -239,6 +239,18 @@ tbody tr:hover{background:#EEF2FF}
 .status-dot.inprogress{background:#D97706}
 .status-dot.completed{background:#059669}
 .status-dot.blocked{background:#DC2626}
+/* Friendly row highlighting by task status */
+.task-row{transition:background .15s ease,border-color .15s ease; border-left:4px solid transparent}
+.task-row.planned{background:#F3F4F6;border-left-color:#9CA3AF}
+.task-row.inprogress{background:#EFF6FF;border-left-color:#3B82F6}
+.task-row.completed{background:#ECFDF5;border-left-color:#10B981}
+.task-row.blocked{background:#FEF2F2;border-left-color:#EF4444}
+
+/* Dark theme adjustments for row highlighting */
+[data-theme="dark"] .task-row.planned{background:rgba(156,163,175,.15);border-left-color:#9CA3AF}
+[data-theme="dark"] .task-row.inprogress{background:rgba(59,130,246,.15);border-left-color:#60A5FA}
+[data-theme="dark"] .task-row.completed{background:rgba(16,185,129,.15);border-left-color:#34D399}
+[data-theme="dark"] .task-row.blocked{background:rgba(239,68,68,.15);border-left-color:#FCA5A5}
 .loader{background:#fff;border:1px solid var(--border);border-radius:10px;padding:10px 12px;margin:8px 0;will-change:opacity,transform}
 .loader-row{display:flex;gap:12px;align-items:center}
 .loader-text{font-size:13px;color:#6B7280;min-width:200px}
@@ -910,26 +922,56 @@ tbody tr:hover{background:#EEF2FF}
     return row;
   }
 
+  // Simple CSV parser that handles quoted fields and commas within quotes
+  function parseCSVLine(line){
+    const result = [];
+    let current = '';
+    let inQuotes = false;
+    for (let i = 0; i < line.length; i++) {
+      const ch = line[i];
+      if (ch === '"') {
+        if (inQuotes && line[i+1] === '"') { // Escaped quote
+          current += '"';
+          i++; // skip next quote
+        } else {
+          inQuotes = !inQuotes;
+        }
+      } else if (ch === ',' && !inQuotes) {
+        result.push(current);
+        current = '';
+      } else {
+        current += ch;
+      }
+    }
+    result.push(current);
+    return result;
+  }
+
   // ===== CSV Loader for Site Inventory =====
   async function loadSiteInventoryCSV() {
     try {
-      const response = await fetch('sites-inventory.csv');
+      // Try hyphenated name first, then underscore variant
+      let response = await fetch('sites-inventory.csv');
       if (!response.ok) {
-        logDiag('Site inventory CSV not found, skipping inventory data');
+        logDiag('sites-inventory.csv not found, trying sites_inventory.csv');
+        response = await fetch('sites_inventory.csv');
+      }
+      if (!response.ok) {
+        logDiag('Site inventory CSV not found in either naming convention, skipping inventory data');
         return null;
       }
       const csvText = await response.text();
-      const lines = csvText.split('\n').filter(line => line.trim());
+      const lines = csvText.split(/\r?\n/).filter(line => line.trim());
       if (lines.length < 2) return null;
       
       // Parse headers
-      const headers = lines[0].split(',').map(h => h.trim().replace(/^"|"$/g, ''));
+      const headers = parseCSVLine(lines[0]).map(h => h.trim().replace(/^"|"$/g, '').toLowerCase());
       console.log('🔍 CSV Headers:', headers);
       const inventory = {};
       
       // Parse data rows
       for (let i = 1; i < lines.length; i++) {
-        const values = lines[i].split(',').map(v => v.trim().replace(/^"|"$/g, ''));
+        const values = parseCSVLine(lines[i]).map(v => v.trim().replace(/^"|"$/g, ''));
         if (values.length < headers.length) {
           console.log(`⚠️ Row ${i} skipped: not enough columns`, {valuesCount: values.length, headersCount: headers.length});
           continue;
@@ -937,12 +979,12 @@ tbody tr:hover{background:#EEF2FF}
         
         const row = {};
         headers.forEach((header, idx) => {
-          row[header.toLowerCase()] = values[idx];
+          row[header] = values[idx];
         });
         
         
         // Extract site code
-        const site = row.site || '';
+        const site = (row.sitecode || row.site || '').toString().trim();
         if (!site) continue;
         
         // Parse coordinates if available
@@ -2038,12 +2080,15 @@ tbody tr:hover{background:#EEF2FF}
     
     const allCols = baseCols.concat(extraKeys.map(k=>({key:k,label:k,get:(r)=> r[k]??""})));
     const th = `<tr>${allCols.map(c=>`<th>${c.label}</th>`).join("")}</tr>`;
-    const tr = rowsN.map(r=>`<tr>${allCols.map(c=>{
+    const tr = rowsN.map(r=>{
+      const rowCls = r.Status==='Completed' ? 'completed' : (r.Status==='In Progress' ? 'inprogress' : (r.Status==='Blocked' ? 'blocked' : 'planned'));
+      return `<tr class="task-row ${rowCls}">${allCols.map(c=>{
       const v=c.get(r);
       const isHtml = typeof v==='string' && v.indexOf('<span class=')===0;
       const val=isHtml? v : ((v && typeof v==='string')?v: (v?String(v):''));
       return isHtml? `<td>${val}</td>` : `<td>${val}</td>`;
-    }).join("")}</tr>`).join("");
+    }).join("")}</tr>`;
+    }).join("");
     document.getElementById("tasks").innerHTML=`<table><thead>${th}</thead><tbody>${tr}</tbody></table>`;
   }
 
