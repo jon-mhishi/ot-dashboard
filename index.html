@@ -2012,9 +2012,10 @@ tbody tr:hover{background:#EEF2FF}
     const normStatus=s=>{ const v=String(s||'').trim().toLowerCase();
       if(!v) return '';
       if(v.includes('progress')) return 'In Progress';
-      if(v.startsWith('plan')) return 'Planned';
-      if(v.startsWith('comp')) return 'Completed';
-      if(v.startsWith('block')||v==='hold'||v==='on hold') return 'Blocked';
+      if(v.includes('active') || v.startsWith('in-work') || v.startsWith('committed')) return 'In Progress';
+      if(v.startsWith('plan') || v==='new' || v==='open' || v==='backlog') return 'Planned';
+      if(v.startsWith('comp') || v==='done' || v==='closed' || v==='resolved' || v==='complete' || v==='completed') return 'Completed';
+      if(v.startsWith('block') || v==='hold' || v==='on hold' || v==='cancelled' || v==='canceled') return 'Blocked';
       return s||'';
     };
     const deriveStatus=(r)=>{
