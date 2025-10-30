@@ -2011,11 +2011,15 @@ tbody tr:hover{background:#EEF2FF}
     // Normalize status case and common variants
     const normStatus=s=>{ const v=String(s||'').trim().toLowerCase();
       if(!v) return '';
+      // In Progress family
       if(v.includes('progress')) return 'In Progress';
-      if(v.includes('active') || v.startsWith('in-work') || v.startsWith('committed')) return 'In Progress';
-      if(v.startsWith('plan') || v==='new' || v==='open' || v==='backlog') return 'Planned';
-      if(v.startsWith('comp') || v==='done' || v==='closed' || v==='resolved' || v==='complete' || v==='completed') return 'Completed';
-      if(v.startsWith('block') || v==='hold' || v==='on hold' || v==='cancelled' || v==='canceled') return 'Blocked';
+      if(v.includes('active') || v.startsWith('in-work') || v.startsWith('committed') || v.includes('doing') || v.includes('working') || v.includes('test') || v.includes('qa')) return 'In Progress';
+      // Planned/Not started family
+      if(v.startsWith('plan') || v==='new' || v==='open' || v==='backlog' || v==='to do' || v==='todo' || v==='not started' || v==='ready') return 'Planned';
+      // Completed family
+      if(v.startsWith('comp') || v==='done' || v==='closed' || v==='resolved' || v==='complete' || v==='completed' || v==='finished') return 'Completed';
+      // Blocked/On hold/Cancelled
+      if(v.startsWith('block') || v==='hold' || v==='on hold' || v==='cancelled' || v==='canceled' || v.includes('deferred')) return 'Blocked';
       return s||'';
     };
     const deriveStatus=(r)=>{
