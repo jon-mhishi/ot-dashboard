@@ -13,6 +13,8 @@ KAR,Europe,BEA,Poland,TRUE,TRUE,FALSE,TRUE,FALSE,TRUE,,,
 BIO,Europe,BEA,"Bunge, Punta Sollana Kalea, 11, 48508 El Puerto, Bizkaia",TRUE,TRUE,TRUE,TRUE,TRUE,TRUE,,43.35812074640504,-3.082332781483095
 ESC,Europe,BEA,"Bunge, Muelle Espigón Sureste, Acceso a Darsena de Escombreras, s/n, 30350 Escombreras, Murcia",TRUE,TRUE,FALSE,TRUE,TRUE,TRUE,,37.567521,-0.950342
 BRU,Europe,BEA,"Bunge, Wilfleinsdorfer Str. 6a, 2460 Gemeinde Bruck an der Leitha, Austria",FALSE,TRUE,FALSE,FALSE,FALSE,,,48.023421187658556,16.756429203957765
+MAN,Europe,BEA,"Bunge, Bonadiesstraße 3, 68169 Mannheim, Germany",FALSE,FALSE,FALSE,FALSE,FALSE,,,49.50558611101378,8.451683556016707
+IZM,Asia,BEA,"Bunge, Bozköy, 35800 Aliağa/İzmir, Türkiye",FALSE,FALSE,FALSE,FALSE,FALSE,,,38.7387209806327,26.968534842197094
 ALT,North America,BNA,Canada,TRUE,TRUE,FALSE,TRUE,FALSE,,,,
 AMZ,South America,BSA,Brazil,FALSE,TRUE,FALSE,FALSE,FALSE,,,,
 XMN,Asia,BEA,China,TRUE,FALSE,FALSE,TRUE,FALSE,,,24.479,118.089
@@ -999,5 +1001,4 @@ WAR,North America,BNA,United States,,FALSE,FALSE,FALSE,,,,,
 ,,,,,,,,,,,,
 ,,,,,,,,,,,,
 
-MAN,Europe,BEA,"Bunge, Bonadiesstraße 3, 68169 Mannheim, Germany",,,,,,,,49.50558611101378,8.451683556016707
-IZM,Europe,BEA,"Bunge, Bozköy, 35800 Aliağa/İzmir, Türkiye",,,,,,,,38.7387209806327,26.968534842197094
+ 
