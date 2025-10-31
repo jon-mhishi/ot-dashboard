@@ -852,6 +852,23 @@ tbody tr:hover{background:#EEF2FF}
     return excludePaths.some(excludePath => areaPathLower.includes(excludePath.toLowerCase()));
   };
 
+  // Helper function to check if area path is in allowed projects paths
+  const isAllowedProjectPath = (areaPath) => {
+    if (!areaPath) return false;
+    const areaPathUpper = areaPath.toUpperCase();
+    // Allowed paths (case-insensitive matching):
+    // Must contain \BEA\Projects, \BNA\Projects, or \BSA\Projects
+    // This matches paths like:
+    // - Global OT Infrastructure\BEA\Projects
+    // - Global OT Infrastructure\BNA\Projects
+    // - Global OT Infrastructure\BSA\Projects
+    return (areaPathUpper.includes('\\BEA\\PROJECTS') || 
+            areaPathUpper.includes('\\BNA\\PROJECTS') || 
+            areaPathUpper.includes('\\BSA\\PROJECTS')) &&
+           !areaPathUpper.includes('BAU') && 
+           !areaPathUpper.includes('CONTINUOUS');
+  };
+
   function toBool(v){
     if(v===true || v===1) return true;
     if(v===false || v===0 || v===null || v===undefined) return false;
@@ -1077,23 +1094,20 @@ tbody tr:hover{background:#EEF2FF}
       
       PROJECTS = workItems.filter(item => {
         const isProjectType = ['Project', 'Epic'].includes(item.fields['System.WorkItemType']);
-        const isNotExcluded = !shouldExcludeItem(item.fields['System.AreaPath']);
-        const title = item.fields['System.Title'] || '';
         const areaPath = item.fields['System.AreaPath'] || '';
+        const isInAllowedPath = isAllowedProjectPath(areaPath);
         
-        // Debug specific project
-        if (title.toLowerCase().includes('gsp') || areaPath.toLowerCase().includes('gsp')) {
-          logDiag(`GSP Project Debug:`, {
-            title: title,
-            workItemType: item.fields['System.WorkItemType'],
+        // Only include projects from allowed paths (BEA\Projects, BNA\Projects, BSA\Projects)
+        if (!isInAllowedPath && isProjectType) {
+          logDiag('Project filtered out (not in allowed path):', {
+            id: item.id,
+            title: item.fields['System.Title'],
             areaPath: areaPath,
-            isProjectType: isProjectType,
-            isNotExcluded: isNotExcluded,
-            shouldExclude: shouldExcludeItem(areaPath)
+            workItemType: item.fields['System.WorkItemType']
           });
         }
         
-        return isProjectType && isNotExcluded;
+        return isProjectType && isInAllowedPath;
       }).map(item => ({
         id: item.id,
         Project: item.fields['System.Title'],
