@@ -869,6 +869,16 @@ tbody tr:hover{background:#EEF2FF}
            !areaPathUpper.includes('CONTINUOUS');
   };
 
+  // Helper function to check if iteration path is in allowed projects paths
+  const isAllowedIterationPath = (iterationPath) => {
+    if (!iterationPath) return false;
+    const itUpper = String(iterationPath).toUpperCase();
+    // Allowed iteration roots: \BEA\Projects, \BNA\Projects, \BSA\Projects
+    return itUpper.includes('\\BEA\\PROJECTS') ||
+           itUpper.includes('\\BNA\\PROJECTS') ||
+           itUpper.includes('\\BSA\\PROJECTS');
+  };
+
   function toBool(v){
     if(v===true || v===1) return true;
     if(v===false || v===0 || v===null || v===undefined) return false;
@@ -1095,19 +1105,22 @@ tbody tr:hover{background:#EEF2FF}
       PROJECTS = workItems.filter(item => {
         const isProjectType = ['Project', 'Epic'].includes(item.fields['System.WorkItemType']);
         const areaPath = item.fields['System.AreaPath'] || '';
-        const isInAllowedPath = isAllowedProjectPath(areaPath);
-        
+        const iterationPath = item.fields['System.IterationPath'] || '';
+        const isInAllowedPath = isAllowedProjectPath(areaPath) || isAllowedIterationPath(iterationPath);
+        const isExcluded = shouldExcludeItem(areaPath);
+
         // Only include projects from allowed paths (BEA\Projects, BNA\Projects, BSA\Projects)
-        if (!isInAllowedPath && isProjectType) {
-          logDiag('Project filtered out (not in allowed path):', {
+        if ((!isInAllowedPath || isExcluded) && isProjectType) {
+          logDiag('Project filtered out (path not allowed or excluded):', {
             id: item.id,
             title: item.fields['System.Title'],
             areaPath: areaPath,
+            iterationPath: iterationPath,
             workItemType: item.fields['System.WorkItemType']
           });
         }
         
-        return isProjectType && isInAllowedPath;
+        return isProjectType && isInAllowedPath && !isExcluded;
       }).map(item => ({
         id: item.id,
         Project: item.fields['System.Title'],
