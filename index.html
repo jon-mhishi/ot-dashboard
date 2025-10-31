@@ -852,10 +852,17 @@ tbody tr:hover{background:#EEF2FF}
     return excludePaths.some(excludePath => areaPathLower.includes(excludePath.toLowerCase()));
   };
 
+  function normalizePathPath(p){
+    try{
+      const up = String(p||'').toUpperCase().replace(/\//g,'\\').replace(/\\+/g,'\\');
+      return up;
+    }catch{ return String(p||'').toUpperCase(); }
+  }
+
   // Helper function to check if area path is in allowed projects paths
   const isAllowedProjectPath = (areaPath) => {
     if (!areaPath) return false;
-    const areaPathUpper = areaPath.toUpperCase();
+    const areaPathUpper = normalizePathPath(areaPath);
     // Allowed paths (case-insensitive matching):
     // Must contain \BEA\Projects, \BNA\Projects, or \BSA\Projects
     // This matches paths like:
@@ -872,11 +879,13 @@ tbody tr:hover{background:#EEF2FF}
   // Helper function to check if iteration path is in allowed projects paths
   const isAllowedIterationPath = (iterationPath) => {
     if (!iterationPath) return false;
-    const itUpper = String(iterationPath).toUpperCase();
+    const itUpper = normalizePathPath(iterationPath);
     // Allowed iteration roots: \BEA\Projects, \BNA\Projects, \BSA\Projects
-    return itUpper.includes('\\BEA\\PROJECTS') ||
-           itUpper.includes('\\BNA\\PROJECTS') ||
-           itUpper.includes('\\BSA\\PROJECTS');
+    return (itUpper.includes('\\BEA\\PROJECTS') ||
+            itUpper.includes('\\BNA\\PROJECTS') ||
+            itUpper.includes('\\BSA\\PROJECTS')) &&
+           !itUpper.includes('BAU') &&
+           !itUpper.includes('CONTINUOUS');
   };
 
   function toBool(v){
@@ -1108,9 +1117,11 @@ tbody tr:hover{background:#EEF2FF}
         const iterationPath = item.fields['System.IterationPath'] || '';
         const isInAllowedPath = isAllowedProjectPath(areaPath) || isAllowedIterationPath(iterationPath);
         const isExcluded = shouldExcludeItem(areaPath);
+        const titleUpper = String(item.fields['System.Title']||'').toUpperCase();
+        const titleIsBAU = titleUpper.includes(' BAU') || titleUpper.startsWith('BAU') || titleUpper.endsWith(' BAU');
 
         // Only include projects from allowed paths (BEA\Projects, BNA\Projects, BSA\Projects)
-        if ((!isInAllowedPath || isExcluded) && isProjectType) {
+        if ((!isInAllowedPath || isExcluded || titleIsBAU) && isProjectType) {
           logDiag('Project filtered out (path not allowed or excluded):', {
             id: item.id,
             title: item.fields['System.Title'],
@@ -1120,7 +1131,7 @@ tbody tr:hover{background:#EEF2FF}
           });
         }
         
-        return isProjectType && isInAllowedPath && !isExcluded;
+        return isProjectType && isInAllowedPath && !isExcluded && !titleIsBAU;
       }).map(item => ({
         id: item.id,
         Project: item.fields['System.Title'],
