@@ -1111,6 +1111,23 @@ tbody tr:hover{background:#EEF2FF}
         })));
       }
       
+      // Helper to pick best-matching custom field value (supports org-specific naming)
+      function pickField(fields, preferredKeys, keyword){
+        try{
+          for(const k of preferredKeys){
+            if(fields && Object.prototype.hasOwnProperty.call(fields,k)){
+              const v = fields[k];
+              if(v!=null && String(v).trim()!=='') return v;
+            }
+          }
+          if(fields && keyword){
+            const key = Object.keys(fields).find(n=> n && n.toLowerCase().includes(keyword));
+            if(key){ const v=fields[key]; if(v!=null && String(v).trim()!=='') return v; }
+          }
+        }catch{}
+        return '';
+      }
+
       PROJECTS = workItems.filter(item => {
         const isProjectType = ['Project', 'Epic'].includes(item.fields['System.WorkItemType']);
         const areaPath = item.fields['System.AreaPath'] || '';
@@ -1132,24 +1149,33 @@ tbody tr:hover{background:#EEF2FF}
         }
         
         return isProjectType && isInAllowedPath && !isExcluded && !titleIsBAU;
-      }).map(item => ({
-        id: item.id,
-        Project: item.fields['System.Title'],
-        Status: item.fields['System.State'],
-        Owner: item.fields['System.AssignedTo']?.displayName || '',
-        Region: item.fields['Custom.Region'] || '',
-        Site: item.fields['Custom.SiteCode'] || '',
-        ProjectType: item.fields['System.WorkItemType'],
-        Description: item.fields['System.Description'] || '',
-        AreaPath: item.fields['System.AreaPath'] || '',
-        IterationPath: item.fields['System.IterationPath'] || '',
-        CreatedDate: item.fields['System.CreatedDate'],
-        ChangedDate: item.fields['System.ChangedDate'],
-        BusinessUnit: extractBusinessUnit(item.fields['System.AreaPath'] || ''),
-        Year: extractYear(item.fields['System.IterationPath'] || ''),
-        Latitude: null, // Not available in DevOps
-        Longitude: null // Not available in DevOps
-      }));
+      }).map(item => {
+        const f = item.fields||{};
+        const beforeVal = pickField(f, ['Custom.BeforeState','Custom.Before','BeforeState','Before'], 'before');
+        const afterVal = pickField(f, ['Custom.AfterState','Custom.After','AfterState','After'], 'after');
+        const benefitsVal = pickField(f, ['Custom.KeyBenefits','KeyBenefits','Benefits'], 'benefit');
+        return {
+          id: item.id,
+          Project: f['System.Title'],
+          Status: f['System.State'],
+          Owner: f['System.AssignedTo']?.displayName || '',
+          Region: f['Custom.Region'] || '',
+          Site: f['Custom.SiteCode'] || '',
+          ProjectType: f['System.WorkItemType'],
+          Description: f['System.Description'] || '',
+          AreaPath: f['System.AreaPath'] || '',
+          IterationPath: f['System.IterationPath'] || '',
+          CreatedDate: f['System.CreatedDate'],
+          ChangedDate: f['System.ChangedDate'],
+          BeforeState: beforeVal,
+          AfterState: afterVal,
+          KeyBenefits: benefitsVal,
+          BusinessUnit: extractBusinessUnit(f['System.AreaPath'] || ''),
+          Year: extractYear(f['System.IterationPath'] || ''),
+          Latitude: null, // Not available in DevOps
+          Longitude: null // Not available in DevOps
+        };
+      });
       
       const excludedTasks = workItems.filter(item => 
         ['Task', 'Bug', 'Issue', 'Requirement', 'Change Request', 'Enhancement'].includes(item.fields['System.WorkItemType']) &&
